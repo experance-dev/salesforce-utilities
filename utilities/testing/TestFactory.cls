@@ -1,45 +1,41 @@
-@isTest
+/**
+ * @description Provides factory methods for generating test SObjects and test users.
+ *              Registered defaults live in TestFactoryDefaults; call createSObject(sObj)
+ *              to automatically apply them.
+ * @group Testing
+ * @author David Wood
+ * @since December 2020
+ * @last May 2026 — Wave 2 conformance: sharing modifier, SYSTEM_MODE DML, exception base, header normalisation
+ */
+@IsTest
 @SuppressWarnings(
   'PMD.CognitiveComplexity, PMD.ExcessivePublicCount, PMD.CyclomaticComplexity'
 )
-/**
- * This is a TestFactory class that provides methods for creating test data.
- *
- * @description This class is responsible for generating test data for unit tests.
-                © 2024 by David Wood and Experance Partners, LLC
- * @license     : Licensed under Creative Commons Attribution 4.0 International
- *                Use, distribute, and modify this code as you see fit.
- *
- * @author      : David Wood david@experancepartners.com.
- *
- */
-public class TestFactory {
+public without sharing class TestFactory {
   private static Integer segment = 1;
-  /**
-   * @description When we create a list of SObjects, we need to have a unique field for the insert if there isn't an autonumber field.
-   * Usually we use the Name field, but some objects don't have a name field.
-   */
+
+  // When creating a list of SObjects we need a unique name field per record.
+  // Objects without a standard Name field are mapped here.
   private static Map<Schema.SObjectType, Schema.SObjectField> nameFieldMap = new Map<Schema.SObjectType, Schema.SObjectField>{
     Contact.SObjectType => Contact.LastName,
     Lead.SObjectType => Lead.LastName,
-    Case.SObjectType => Case.CaseNumber, //this is the autonumber field
+    Case.SObjectType => Case.CaseNumber,
     OpportunityLineItem.SObjectType => OpportunityLineItem.Description,
     QuoteLineItem.SObjectType => QuoteLineItem.Description,
     User.SObjectType => User.LastName
   };
 
+  // ── createSObject overloads ──────────────────────────────────────────────
+
   /**
-   * @description Creates a single sObject.
-   * @param sObj  Type of sObject to create.
-   * @return     `SObject`
+   * @param sObj SObject instance to populate with defaults.
+   * @return `SObject`
    */
   public static SObject createSObject(SObject sObj) {
-    // Check what type of object we are creating and add any defaults that are needed.
     String objectName = String.valueOf(sObj.getSObjectType());
-    // Construct the default values class. Salesforce doesn't allow '__' in class names
+    // Derive the defaults class name: strip __c / __ so custom objects resolve correctly.
     String defaultClassName =
       objectName.replaceAll('__(c|C)$|__', '') + 'Defaults';
-    // If there is a class that exists for the default values, then use them
     if (Type.forName('TestFactoryDefaults.' + defaultClassName) != null) {
       sObj = createSObject(sObj, 'TestFactoryDefaults.' + defaultClassName);
     }
@@ -47,31 +43,28 @@ public class TestFactory {
   }
 
   /**
-   * @description    Creates a single sObject
-   * @param sObj     Type of sObject to create
-   * @param doInsert Boolean should this object be inserted?
-   * @return        `SObject`
+   * @param sObj     SObject instance to populate.
+   * @param doInsert When true, inserts the record in SYSTEM_MODE.
+   * @return `SObject`
    */
   public static SObject createSObject(SObject sObj, Boolean doInsert) {
     SObject retObject = createSObject(sObj);
     if (doInsert) {
-      insert retObject;
+      Database.insert(retObject, AccessLevel.SYSTEM_MODE);
     }
     return retObject;
   }
 
   /**
-   * @description            creates a single sObject
-   * @param sObj             Type of sObject to create
-   * @param defaultClassName Name of the class to provide field defaults
-   * @return                `SObject`
-   * @exception              TestFactoryException when defaultClassName param is not a valid type.
+   * @param sObj             SObject instance to populate.
+   * @param defaultClassName Fully-qualified inner-class name (e.g. 'TestFactoryDefaults.AccountDefaults').
+   * @return `SObject`
+   * @exception TestFactoryException when defaultClassName is not a resolvable type.
    */
   public static SObject createSObject(SObject sObj, String defaultClassName) {
-    // Create an instance of the defaults class so we can get the Map of field defaults
     Type t = Type.forName(defaultClassName);
     if (t == null) {
-      throw new TestFactoryException('Invalid defaults class.');
+      throw new TestFactoryException('Invalid defaults class: ' + defaultClassName);
     }
     FieldDefaults defaults = (FieldDefaults) t.newInstance();
     addFieldDefaults(sObj, defaults.getFieldDefaults());
@@ -79,11 +72,10 @@ public class TestFactory {
   }
 
   /**
-   * @description            Create a single sObject
-   * @param sObj             Type of sObject to create
-   * @param defaultClassName String name of a class providing default values
-   * @param doInsert         Boolean should this method insert the created object?
-   * @return                 `SObject`
+   * @param sObj             SObject instance to populate.
+   * @param defaultClassName Fully-qualified inner-class name.
+   * @param doInsert         When true, inserts the record in SYSTEM_MODE.
+   * @return `SObject`
    */
   public static SObject createSObject(
     SObject sObj,
@@ -92,16 +84,17 @@ public class TestFactory {
   ) {
     SObject retObject = createSObject(sObj, defaultClassName);
     if (doInsert) {
-      insert retObject;
+      Database.insert(retObject, AccessLevel.SYSTEM_MODE);
     }
     return retObject;
   }
 
+  // ── createSObjectList overloads ─────────────────────────────────────────
+
   /**
-   * @description           Creates a list of sObjects
-   * @param sObj            Type of sObjects to create
-   * @param numberOfObjects Integer number of objects to create
-   * @return                `SObject[]`
+   * @param sObj            Template SObject.
+   * @param numberOfObjects Number of clones to build.
+   * @return `SObject[]`
    */
   public static SObject[] createSObjectList(
     SObject sObj,
@@ -111,11 +104,10 @@ public class TestFactory {
   }
 
   /**
-   * @description           Creates a list of sObjects
-   * @param sObj            Type of sObjects to create
-   * @param numberOfObjects Integer number of objects to create
-   * @param doInsert         Boolean should this method insert the created object?
-   * @return                `SObject[]`
+   * @param sObj            Template SObject.
+   * @param numberOfObjects Number of clones to build.
+   * @param doInsert        When true, bulk-inserts the list in SYSTEM_MODE.
+   * @return `SObject[]`
    */
   public static SObject[] createSObjectList(
     SObject sObj,
@@ -124,18 +116,58 @@ public class TestFactory {
   ) {
     SObject[] retList = createSObjectList(sObj, numberOfObjects, (String) null);
     if (doInsert) {
-      insert retList;
+      Database.insert(retList, AccessLevel.SYSTEM_MODE);
     }
     return retList;
   }
 
   /**
-   * @description           Creates a list of sObjects
-   * @param sObj            Type of sObjects to create
-   * @param numberOfObjects Integer number of objects to create
-   * @param defaultClassName String name of a class providing defaults (optional)
-   * @param doInsert         Boolean should this method insert the created object?
-   * @return                `SObject[]`
+   * @param sObj            Template SObject.
+   * @param numberOfObjects Number of clones to build.
+   * @param defaultClassName Fully-qualified inner-class name (optional, nullable).
+   * @return `SObject[]`
+   */
+  public static SObject[] createSObjectList(
+    SObject sObj,
+    Integer numberOfObjects,
+    String defaultClassName
+  ) {
+    SObject[] sObjs = new List<SObject>{};
+    SObject newObj;
+
+    if (defaultClassName == null) {
+      newObj = createSObject(sObj);
+    } else {
+      newObj = createSObject(sObj, defaultClassName);
+    }
+
+    String nameField = String.valueOf(nameFieldMap.get(sObj.getSObjectType()));
+    if (nameField == null) {
+      nameField = 'Name';
+    }
+    Boolean nameIsAutoNumber = sObj.getSObjectType()
+      .getDescribe()
+      .fields.getMap()
+      .get(nameField)
+      .getDescribe()
+      .isAutoNumber();
+
+    for (Integer i = 0; i < numberOfObjects; i++) {
+      SObject clonedSObj = newObj.clone(false, true);
+      if (!nameIsAutoNumber) {
+        clonedSObj.put(nameField, (String) clonedSObj.get(nameField) + ' ' + i);
+      }
+      sObjs.add(clonedSObj);
+    }
+    return sObjs;
+  }
+
+  /**
+   * @param sObj            Template SObject.
+   * @param numberOfObjects Number of clones to build.
+   * @param defaultClassName Fully-qualified inner-class name (optional, nullable).
+   * @param doInsert        When true, bulk-inserts the list in SYSTEM_MODE.
+   * @return `SObject[]`
    */
   @SuppressWarnings('PMD.ExcessiveParameterList')
   public static SObject[] createSObjectList(
@@ -150,98 +182,19 @@ public class TestFactory {
       defaultClassName
     );
     if (doInsert) {
-      insert retList;
+      Database.insert(retList, AccessLevel.SYSTEM_MODE);
     }
     return retList;
   }
 
-  /**
-   * @description           Creates a list of sObjects
-   * @param sObj            Type of sObjects to create
-   * @param numberOfObjects Integer number of objects to create
-   * @param defaultClassName String name of a class providing defaults
-   * @return                `SObject[]`
-   */
-  public static SObject[] createSObjectList(
-    SObject sObj,
-    Integer numberOfObjects,
-    String defaultClassName
-  ) {
-    SObject[] sObjs = new List<SObject>{};
-    SObject newObj;
-
-    // Get one copy of the object
-    if (defaultClassName == null) {
-      newObj = createSObject(sObj);
-    } else {
-      newObj = createSObject(sObj, defaultClassName);
-    }
-
-    // Get the name field for the object
-    String nameField = String.valueOf(nameFieldMap.get(sObj.getSObjectType()));
-    if (nameField == null) {
-      nameField = 'Name';
-    }
-    Boolean nameIsAutoNumber = sObj.getSObjectType()
-      .getDescribe()
-      .fields.getMap()
-      .get(nameField)
-      .getDescribe()
-      .isAutoNumber();
-
-    // Clone the object the number of times requested. Increment the name field so each record is unique
-    for (Integer i = 0; i < numberOfObjects; i++) {
-      SObject clonedSObj = newObj.clone(false, true);
-      if (!nameIsAutoNumber) {
-        clonedSObj.put(nameField, (String) clonedSObj.get(nameField) + ' ' + i);
-      }
-      sObjs.add(clonedSObj);
-    }
-    return sObjs;
-  }
+  // ── User helpers ─────────────────────────────────────────────────────────
 
   /**
-   * @description    Sets field defaults on the sObj given the map of defaults.
-   * @param sObj     Obj to manipulate.
-   * @param defaults Defaults map of sObjectField to Object to use for values.
+   * @param profileId Profile Id for the new user.
+   * @param doInsert  When true, inserts the user wrapped in System.runAs(admin).
+   * @return `User`
    */
-  private static void addFieldDefaults(
-    SObject sObj,
-    Map<Schema.SObjectField, Object> defaults
-  ) {
-    // Loop through the map of fields and if they weren't specifically assigned, fill them.
-    Map<String, Object> populatedFields = sObj.getPopulatedFieldsAsMap();
-    for (Schema.SObjectField field : defaults.keySet()) {
-      if (!populatedFields.containsKey(String.valueOf(field))) {
-        sObj.put(field, defaults.get(field));
-      }
-    }
-  }
-
-  /**
-   * @description Internal custom exception class
-   */
-  public class TestFactoryException extends Exception {
-  }
-
-  /**
-   * @description Use the FieldDefaults interface to set up values you want to default in for all objects
-   */
-  public interface FieldDefaults {
-    /**
-     * @description Interface used by implementing classes to define defaults.
-     * @return     `Map<Schema.SObjectField, Object>`
-     */
-    Map<Schema.SObjectField, Object> getFieldDefaults();
-  }
-
-  /**
-   * @description     creates a test user. Useful for permissions testing
-   * @param profileId Profile Id to use when creating a user.
-   * @param doInsert  Boolean, should this code insert the user?
-   * @return          `User`
-   */
-  public static User createTestUser(Id profileId, boolean doInsert) {
+  public static User createTestUser(Id profileId, Boolean doInsert) {
     User u = new User(
       profileId = profileId,
       LastName = 'last',
@@ -256,20 +209,21 @@ public class TestFactory {
       LocaleSidKey = 'en_US'
     );
     if (doInsert) {
+      // User inserts require System.runAs(admin) to avoid mixed-DML errors in tests.
       System.runAs(getAdminUser()) {
-        insert u;
+        Database.insert(u, AccessLevel.SYSTEM_MODE);
       }
     }
     return u;
   }
 
   /**
-   * @description       Creates a test user with a given profile.
-   * @param doInsert    Should this code insert the created user?
-   * @param profileName Name of the profile to create the user with.
-   * @return           `User`
+   * @param doInsert    When true, inserts the user.
+   * @param profileName Name of the profile to assign.
+   * @return `User`
    */
   public static User createTestUser(Boolean doInsert, String profileName) {
+    // SOQL: profile lookup; acceptable in test context — no production path.
     Profile selectedProfile = [
       SELECT Id
       FROM Profile
@@ -279,28 +233,20 @@ public class TestFactory {
   }
 
   /**
-   * @description Creates the default test user
-   * Default set in TestFactoryDefaults.TEST_USER_PERMISSION
-   *
-   * @return The created test user.
+   * @return The default test user with BasePermissionsApex and TEST_USER_PERMISSION assigned.
    */
   public static User createTestUser() {
     User u = createMinAccessUser(false);
     System.runAs(getAdminUser()) {
-      insert u;
-
-      //***specific for Stowers***
+      Database.insert(u, AccessLevel.SYSTEM_MODE);
       assignPermSetToUser(u, 'BasePermissionsApex');
-
       assignPermSetToUser(u, TestFactoryDefaults.TEST_USER_PERMISSION);
     }
     return u;
   }
 
   /**
-   * @description Creates a test user based on the specified permission set.
-   *
-   * @param permissionSetName The name of the permission set to use for creating the test user.
+   * @param permissionSetName Permission set to assign after creating the user.
    * @return The created test user.
    */
   public static User createTestUserFromPermissionSet(String permissionSetName) {
@@ -310,12 +256,11 @@ public class TestFactory {
   }
 
   /**
-   * @description    Creates a user with the Minimum Access Profile
-   * Relies on the previous method for creating the user.
-   * @param doInsert Should this code insert the user?
-   * @return        `User`
+   * @param doInsert When true, inserts the user.
+   * @return `User` with Minimum Access - Salesforce profile.
    */
   public static User createMinAccessUser(Boolean doInsert) {
+    // SOQL: profile lookup; acceptable in test context.
     Id profileId = [
       SELECT Id
       FROM Profile
@@ -326,45 +271,11 @@ public class TestFactory {
   }
 
   /**
-   * @description       Assigns a permission set to a given user.
-   * @param usr         User to assign the permission set to.
-   * @param permSetName String name of the permission set.
-   */
-  public static void assignPermSetToUser(User usr, String permSetName) {
-    Id permSetId = [
-      SELECT Id
-      FROM PermissionSet
-      WHERE Name LIKE :permSetName
-      LIMIT 1
-    ]
-    .Id;
-    PermissionSetAssignment psa = new PermissionSetAssignment(
-      AssigneeId = usr.Id,
-      PermissionSetId = permSetId
-    );
-    insert psa;
-  }
-
-  /**
-   * @description    Intentionally invalidates a list of sObjects. This is useful for
-   *                  intentionally causing DML errors during testing.
-   * @param incoming List of SObjects
-   * @return        `List<sObject>`
-   */
-  public static List<sObject> invalidateSObjectList(List<sObject> incoming) {
-    for (sObject obj : incoming) {
-      obj.put('name', '');
-    }
-    return incoming;
-  }
-
-  /**
-   * @description    Creates a user with Marketing User Profile
-   * Relies on the previous method for creating the user.
-   * @param doInsert Should this code insert the user?
-   * @return        `User`
+   * @param doInsert When true, inserts the user.
+   * @return `User` with Marketing User profile.
    */
   public static User createMarketingUser(Boolean doInsert) {
+    // SOQL: profile lookup; acceptable in test context.
     Id profileId = [
       SELECT Id
       FROM Profile
@@ -376,25 +287,33 @@ public class TestFactory {
   }
 
   /**
-   * @description Returns a map of all the record types for a given sObject.
-   * @param sObjectName The name of the sObject.
-   * @return A map of all the record types for the given sObject.
+   * @param usr         User to assign the permission set to.
+   * @param permSetName Name of the permission set.
    */
-  public static Map<String, Schema.RecordTypeInfo> getRecordTypes(
-    String sObjectName
-  ) {
-    Schema.DescribeSObjectResult describeResult = Schema.getGlobalDescribe()
-      .get(sObjectName)
-      .getDescribe();
-    return describeResult.getRecordTypeInfosByName();
+  public static void assignPermSetToUser(User usr, String permSetName) {
+    // SOQL: permission set lookup; acceptable in test context.
+    Id permSetId = [
+      SELECT Id
+      FROM PermissionSet
+      WHERE Name LIKE :permSetName
+      LIMIT 1
+    ]
+    .Id;
+    PermissionSetAssignment psa = new PermissionSetAssignment(
+      AssigneeId = usr.Id,
+      PermissionSetId = permSetId
+    );
+    Database.insert(psa, AccessLevel.SYSTEM_MODE);
   }
 
+  // ── Query helpers ────────────────────────────────────────────────────────
+
   /**
-   * @description Retrieves the most recently created test user with a given permissionset name.
-   * @param permissionName The name of the permissionset to search for.
-   * @return A `User` object representing the most recently created test user with the specified permissionset name.
+   * @param permissionName Permission set name to match.
+   * @return Most recently created User with that permission set and LastName = 'last'.
    */
   public static User getCreatedTestUser(String permissionName) {
+    // SOQL: sub-select on PermissionSetAssignment; acceptable in test context.
     return [
       SELECT Id
       FROM User
@@ -411,21 +330,17 @@ public class TestFactory {
   }
 
   /**
-   * @description Returns the default created user
-   * Default set in TestFactoryDefaults.TEST_USER_PERMISSION
-   *
-   * @return The created test user.
+   * @return Most recently created test user matching TestFactoryDefaults.TEST_USER_PERMISSION.
    */
   public static User getCreatedTestUser() {
     return getCreatedTestUser(TestFactoryDefaults.TEST_USER_PERMISSION);
   }
 
   /**
-   * @description Retrieves the most recently created 'Minimun Access - Salesforce' test user with a given profile name.
-   * @return A `User` object representing the most recently created 'Minimun Access - Salesforce' test user.
+   * @return Most recently created Minimum Access - Salesforce test user.
    */
   public static User getMinAccessUser() {
-    // Get the most recently created user with the 'Minimum Access - Salesforce' profile
+    // SOQL: acceptable in test context.
     return [
       SELECT Id
       FROM User
@@ -436,12 +351,11 @@ public class TestFactory {
   }
 
   /**
-   * @description Retrieves the most recently created 'Standard User' test user with a given profile name.
-   * @param profileName the name of the profile to search for.
-   * @return A `User` object representing the most recently created 'Standard User' test user.
+   * @param profileName Profile name to match.
+   * @return Most recently created active User with that profile.
    */
   public static User getTestUser(String profileName) {
-    // Get the most recently created user with the given profile
+    // SOQL: acceptable in test context.
     return [
       SELECT Id
       FROM User
@@ -452,13 +366,25 @@ public class TestFactory {
   }
 
   /**
-   * @description Returns the Pricebook Entry Id for the given Pricebook Id and Product Id.
-   *
-   * @param pricebookId The Id of the Pricebook.
-   * @param productId The Id of the Product.
-   * @return The Pricebook Entry Id.
+   * @param sObjectName API name of the SObject.
+   * @return Map of record type name to RecordTypeInfo.
+   */
+  public static Map<String, Schema.RecordTypeInfo> getRecordTypes(
+    String sObjectName
+  ) {
+    Schema.DescribeSObjectResult describeResult = Schema.getGlobalDescribe()
+      .get(sObjectName)
+      .getDescribe();
+    return describeResult.getRecordTypeInfosByName();
+  }
+
+  /**
+   * @param pricebookId Pricebook Id.
+   * @param productId   Product2 Id.
+   * @return The matching PricebookEntry Id.
    */
   public static Id getPricebookEntryId(Id pricebookId, Id productId) {
+    // SOQL: acceptable in test context.
     PricebookEntry pbe = [
       SELECT Id
       FROM PricebookEntry
@@ -469,11 +395,8 @@ public class TestFactory {
   }
 
   /**
-   * @description Returns a fake ID for the specified SObject type.
-   * getFakeId(Contact.SObjectType) returns a fake Contact ID.
-   *
-   * @param sot The Schema.SObjectType for which a fake ID is needed.
-   * @return A fake ID as a String.
+   * @param sot SObjectType to generate a fake Id for.
+   * @return A fake 18-char Id string safe for in-memory test assertions.
    */
   public static String getFakeId(Schema.SObjectType sot) {
     String result = String.valueOf(segment++);
@@ -483,11 +406,43 @@ public class TestFactory {
   }
 
   /**
-   * @description Returns an admin user.
-   *
-   * @return The admin user.
+   * @param incoming List of SObjects to invalidate (sets Name to empty string).
+   * @return `List<SObject>` — same list, mutated.
    */
+  public static List<SObject> invalidateSObjectList(List<SObject> incoming) {
+    for (SObject obj : incoming) {
+      obj.put('name', '');
+    }
+    return incoming;
+  }
+
+  // ── Inner types ──────────────────────────────────────────────────────────
+
+  /** @description Thrown when a defaults class name cannot be resolved or is otherwise invalid. */
+  public class TestFactoryException extends UtilitiesModuleException {}
+
+  /** @description Implement this interface in any inner class of TestFactoryDefaults to supply field defaults. */
+  public interface FieldDefaults {
+    /** @return Map of SObjectField to default value. */
+    Map<Schema.SObjectField, Object> getFieldDefaults();
+  }
+
+  // ── Private helpers ──────────────────────────────────────────────────────
+
+  private static void addFieldDefaults(
+    SObject sObj,
+    Map<Schema.SObjectField, Object> defaults
+  ) {
+    Map<String, Object> populatedFields = sObj.getPopulatedFieldsAsMap();
+    for (Schema.SObjectField field : defaults.keySet()) {
+      if (!populatedFields.containsKey(String.valueOf(field))) {
+        sObj.put(field, defaults.get(field));
+      }
+    }
+  }
+
   private static User getAdminUser() {
+    // SOQL: acceptable in test context — needed for mixed-DML workaround.
     return [
       SELECT Id
       FROM User

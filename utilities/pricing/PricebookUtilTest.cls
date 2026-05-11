@@ -1,30 +1,29 @@
 /**
- * @description Test class for PricebookUtil. Ensures all functionalities of the PricebookUtil class are properly tested.
+ * @description Test coverage for PricebookUtil — standard pricebook ID retrieval in system and test contexts.
+ * @group Pricing
+ * @see PricebookUtil
  * @author David Wood
  * @since June 2024
- * @group Pricebook Management Tests
- * @see PricebookUtil
+ * @last May 2026 — Wave 6 migration + conformance
  */
 @IsTest
-private class PricebookUtilTest {
+private without sharing class PricebookUtilTest {
   @TestSetup
   static void makeData() {
     TestFactory.createTestUser();
   }
-  /**
-   * @description Tests the retrieval of the standard pricebook Id in a non-test context.
-   */
+
   @IsTest
   static void testGetStandardPricebookIdSytemContext() {
     System.runAs(TestFactory.getCreatedTestUser()) {
-      // Setup: Ensure there is no standard pricebook Id initially
-      PricebookUtil.standardPricebookId = null;
+      // Setup: inject null to reset cached value
+      PricebookUtil.testStandardPricebookId = null;
 
       // Execute: Retrieve the standard pricebook Id
       Id standardPricebookId = PricebookUtil.standardPricebookId;
 
       // Verify: Ensure the standard pricebook Id is retrieved correctly
-      System.assertNotEquals(
+      Assert.areNotEqual(
         null,
         standardPricebookId,
         'The standard pricebook Id should not be null.'
@@ -35,7 +34,7 @@ private class PricebookUtilTest {
       standardPricebookId = PricebookUtil.standardPricebookId;
 
       // Verify: Ensure the standard pricebook Id is retrieved correctly
-      System.assertNotEquals(
+      Assert.areNotEqual(
         null,
         standardPricebookId,
         'The standard pricebook Id should not be null.'
@@ -43,16 +42,15 @@ private class PricebookUtilTest {
     }
   }
 
-  /**
-   * @description Tests the retrieval of the standard pricebook Id in a test context.
-   */
   @IsTest
   static void testGetStandardPricebookIdTestContext() {
     // Setup: Create a test user and run the test as that user
     User testUser = TestFactory.createMinAccessUser(true);
     System.runAs(testUser) {
-      // Ensure there is no standard pricebook Id initially
-      PricebookUtil.standardPricebookId = null;
+      // Activate the standard pricebook and inject via @TestVisible field
+      Id pbId = Test.getStandardPricebookId();
+      upsert new Pricebook2(Id = pbId, IsActive = true);
+      PricebookUtil.testStandardPricebookId = pbId;
 
       // Execute: Retrieve the standard pricebook Id in test context
       Test.startTest();
@@ -60,7 +58,7 @@ private class PricebookUtilTest {
       Test.stopTest();
 
       // Verify: Ensure the standard pricebook Id is retrieved correctly
-      System.assertNotEquals(
+      Assert.areNotEqual(
         null,
         standardPricebookId,
         'The standard pricebook Id should not be null in test context.'

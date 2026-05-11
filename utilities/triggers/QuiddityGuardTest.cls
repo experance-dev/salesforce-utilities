@@ -1,12 +1,19 @@
+/**
+ * @description Unit tests for QuiddityGuard. Verifies trusted-quiddity detection,
+ *              override mechanics, and AccessException on unacceptable quiddities.
+ * @group Triggers
+ * @see QuiddityGuard
+ * @author David Wood
+ * @since July 2024
+ * @last May 2026 — Wave 6 conformance
+ */
 @isTest
-private class QuiddityGuardTest {
+private without sharing class QuiddityGuardTest {
   @TestSetup
   static void makeData() {
     TestFactory.createTestUser();
   }
-  /**
-   * @description Test to verify that QuiddityGuard identifies trusted quiddities correctly.
-   */
+
   @isTest
   static void testQuiddityGuardFindsTestQuiddityPositive() {
     System.runAs(TestFactory.getCreatedTestUser()) {
@@ -45,9 +52,6 @@ private class QuiddityGuardTest {
     }
   }
 
-  /**
-   * @description Test to verify that QuiddityGuard correctly identifies quiddities not in the trusted list.
-   */
   @isTest
   static void testQuiddityOverrideReturnsFalsePositive() {
     System.runAs(TestFactory.getCreatedTestUser()) {
@@ -64,9 +68,6 @@ private class QuiddityGuardTest {
     }
   }
 
-  /**
-   * @description Test to verify that QuiddityGuard throws an exception when throwError is true and quiddity is not acceptable.
-   */
   @isTest
   static void testQuiddityGuardThrowsException() {
     System.runAs(TestFactory.getCreatedTestUser()) {

@@ -3,3 +3,8 @@
 .idea/
 .sfdx/
 .sf/
+
+# Claude Code
+.claude/
+CLAUDE.md
+CLAUDE.local.md

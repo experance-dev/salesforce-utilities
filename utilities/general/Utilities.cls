@@ -3,14 +3,13 @@
  * @license Licensed under Creative Commons Attribution 4.0 International. Use, distribute, and modify this code as you see fit.
  * @author David Wood
  * @since June 2024
+ * @last May 2026 — conformance refactor
  * @group Utilities
  */
 public inherited sharing class Utilities {
   private static Integer segment = 1;
   /**
-   * @description Returns the standard pricebook Id. Included for existing classes.
-   * Use PricebookUtil directly.
-   *
+   * @description Returns the standard pricebook Id. Included for existing classes; prefer PricebookUtil directly.
    * @return The standard pricebook Id.
    */
   public static Id standardPricebookId {
@@ -34,8 +33,7 @@ public inherited sharing class Utilities {
   }
 
   /**
-   * Retrieves the record type information for a given sObject.
-   *
+   * @description Retrieves record type information for a given sObject. Delegates to getRecordTypeMap.
    * @param sObjectName The API name of the sObject for which to retrieve record type information.
    * @return A map of record type API names to their corresponding Schema.RecordTypeInfo objects.
    */
@@ -249,15 +247,12 @@ public inherited sharing class Utilities {
    * @param sObjectList The list of SObjects to check.
    * @return True if the list is null or empty, false otherwise.
    */
-
   public static Boolean isNullOrEmpty(List<SObject> sObjectList) {
     return sObjectList == null || sObjectList.isEmpty();
   }
 
   /**
    * @description Returns a fake ID for the specified SObject type.
-   * getFakeId(Contact.SObjectType) returns a fake Contact ID.
-   *
    * @param sot The Schema.SObjectType for which a fake ID is needed.
    * @return A fake ID as a String.
    */
@@ -270,7 +265,6 @@ public inherited sharing class Utilities {
 
   /**
    * @description Creates fake IDs for a list of SObjects.
-   *
    * @param sobjList The list of SObjects for which fake IDs need to be created.
    * @return A list of SObjects with fake IDs.
    */

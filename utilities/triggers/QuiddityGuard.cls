@@ -1,24 +1,22 @@
 /**
- * @description contains methods and static lists for rapid acceptance of a
- * particular set of quiddities
+ * @description Classifies the current Salesforce execution context (quiddity) and
+ *              exposes pre-built trusted/untrusted quiddity lists for guard checks.
  *
- * @group   Utilities
- * @group   Quiddity Guard
- *
+ * @group   Triggers
  * @author  Apex Recipes, David Wood
  * @since   June 2024
+ * @last    May 2026 — Wave 3 conformance
  */
-public with sharing class QuiddityGuard {
+public without sharing class QuiddityGuard {
   /**
-   * @description a private testvisible variable allowing developers to
-   * inject a custom quiddity value during test execution.
+   * Allows tests to inject a synthetic quiddity without executing in a real async context.
    */
   @TestVisible
   private static Quiddity testQuiddityOverride;
 
   /**
-   * @description a non-exhaustive list of Quiddities that do not include user
-   * situations where users could be injecting malicious data.
+   * Non-exhaustive list of quiddities that do not include user-controlled data paths;
+   * safe to trust without manual FLS/CRUD checks.
    */
   public static List<Quiddity> trustedQuiddities = new List<Quiddity>{
     Quiddity.SYNCHRONOUS,
@@ -30,8 +28,7 @@ public with sharing class QuiddityGuard {
   };
 
   /**
-   * @description An exhaustive list of quiddities that are valid for a test
-   * execution.
+   * Exhaustive list of quiddities that indicate a test execution.
    */
   public static List<Quiddity> trustedTestQuiddities = new List<Quiddity>{
     Quiddity.RUNTEST_SYNC,
@@ -40,8 +37,7 @@ public with sharing class QuiddityGuard {
   };
 
   /**
-   * @description A list of quiddities that may include user-defined data and
-   * therefore should not be trusted without manual FLS/CRUD checks.
+   * Quiddities that may carry user-defined data; require FLS/CRUD checks before trusting.
    */
   public static List<Quiddity> untrustedQuiddities = new List<Quiddity>{
     Quiddity.AURA,
@@ -56,10 +52,8 @@ public with sharing class QuiddityGuard {
     Quiddity.VF
   };
 
-  /**
-   * @description Private method to get the current quiddity, considering the override if present.
-   * @return `Quiddity`
-   */
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+
   private static Quiddity getCurrentQuiddity() {
     Quiddity q = System.Request.getCurrent().getQuiddity();
     if (testQuiddityOverride != null) {
@@ -68,26 +62,22 @@ public with sharing class QuiddityGuard {
     return q;
   }
 
+  // ─── Public API ─────────────────────────────────────────────────────────────
+
   /**
-   * @description A method to determine if the current Quiddity context is
-   * within a caller-supplied list of acceptable quiddity values.
-   * @param acceptableQuiddities A list of quiddities to check against.
-   * @return `boolean`
+   * @param acceptableQuiddities Quiddities to accept.
+   * @return True when the current quiddity is in the supplied list.
    */
   public static Boolean isAcceptableQuiddity(
     List<Quiddity> acceptableQuiddities
   ) {
-    Quiddity q = getCurrentQuiddity();
-    return acceptableQuiddities.contains(q);
+    return acceptableQuiddities.contains(getCurrentQuiddity());
   }
 
   /**
-   * @description A method to determine if the current Quiddity context is
-   * within a caller-supplied list of acceptable quiddity values, and optionally throw an exception.
-   * @param acceptableQuiddities A list of quiddities to check against.
-   * @param throwError A boolean indicating whether to throw an exception if the quiddity is not acceptable.
-   * @return `boolean`
-   * @throws `AccessException` if throwError is true and the quiddity is not acceptable.
+   * @param acceptableQuiddities Quiddities to accept.
+   * @param throwError           When true, throws AccessException on rejection.
+   * @return True when the current quiddity is in the supplied list.
    */
   public static Boolean isAcceptableQuiddity(
     List<Quiddity> acceptableQuiddities,
@@ -107,10 +97,8 @@ public with sharing class QuiddityGuard {
   }
 
   /**
-   * @description A method to determine if the current Quiddity context is not
-   * within a caller-supplied list of acceptable quiddity values.
-   * @param acceptableQuiddities A list of quiddities to check against.
-   * @return `boolean`
+   * @param acceptableQuiddities Quiddities to accept.
+   * @return True when the current quiddity is NOT in the supplied list.
    */
   public static Boolean isNotAcceptableQuiddity(
     List<Quiddity> acceptableQuiddities
@@ -118,42 +106,29 @@ public with sharing class QuiddityGuard {
     return !isAcceptableQuiddity(acceptableQuiddities);
   }
 
-  /**
-   * @description A method to determine if the current Quiddity context is REST.
-   * @return `boolean`
-   */
+  /** @return True when the current quiddity is REST. */
   public static Boolean isRestQuiddity() {
     return getCurrentQuiddity() == Quiddity.REST;
   }
 
-  /**
-   * @description A method to determine if the current Quiddity context is SOAP.
-   * @return `boolean`
-   */
+  /** @return True when the current quiddity is SOAP. */
   public static Boolean isSoapQuiddity() {
     return getCurrentQuiddity() == Quiddity.SOAP;
   }
 
-  /**
-   * @description Determines if the current execution is using the Bulk API quiddity.
-   *
-   * @return Boolean value indicating if the current execution is using the Bulk API quiddity.
-   */
+  /** @return True when the current quiddity is Bulk API. */
   public static Boolean isBulkAPIQuiddity() {
     return getCurrentQuiddity() == Quiddity.BULK_API;
   }
 
-  /**
-   * @description A method to determine if the current Quiddity context is either REST or SOAP.
-   * @return `boolean`
-   */
+  /** @return True when the current quiddity is REST, SOAP, or Bulk API. */
   public static Boolean isApiQuiddity() {
     return isRestQuiddity() || isSoapQuiddity() || isBulkAPIQuiddity();
   }
 
-  /**
-   * @description A custom exception class to report the quiddity and acceptable quiddities.
-   */
-  public class AccessException extends Exception {
+  // ─── Exceptions ─────────────────────────────────────────────────────────────
+
+  /** Thrown when a quiddity check fails and the caller requests an exception. */
+  public class AccessException extends UtilitiesModuleException {
   }
 }

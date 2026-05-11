@@ -1,31 +1,25 @@
 /**
- * @description This is a test class for the UtilitiesTest class.
- * It contains test methods to verify the functionality of the Utilities class.
+ * @description Test coverage for the Utilities class.
  *
- * @group Utilities
- * @see   UtilitiesHelper
+ * @group General
+ * @see Utilities
  *
  * @author David Wood
  * @since June 2024
+ * @last May 2026 — Wave 6 conformance
  */
 @isTest
-public with sharing class UtilitiesTest {
+public without sharing class UtilitiesTest {
   static final Id FAKE_OPPORTUNITY_ID = TestFactory.getFakeId(
     Opportunity.SObjectType
   );
 
   @TestSetup
-  /**
-   * @description This method is responsible for generating test data.
-   */
   static void makeData() {
     TestFactory.createMinAccessUser(true);
   }
 
   @isTest
-  /**
-   * @description This method is used to test the functionality of the 'standardPricebookId' property.
-   */
   static void testStandardPricebookId() {
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
@@ -38,9 +32,6 @@ public with sharing class UtilitiesTest {
   }
 
   @isTest
-  /**
-   * @description This method is used to test the functionality of the 'getRecordTypeMap' method.
-   */
   static void testGetRecordTypeMap() {
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
@@ -58,9 +49,6 @@ public with sharing class UtilitiesTest {
   }
 
   @isTest
-  /**
-   * @description This method is used to test the functionality of the 'convertNullToZero' methods.
-   */
   static void testConvertNullToZero() {
     Integer i = null;
     Double d = null;
@@ -102,9 +90,6 @@ public with sharing class UtilitiesTest {
   }
 
   @isTest
-  /**
-   * @description This method is used to test the functionality of the 'createIdMapFromCollectionByKey' method.
-   */
   static void testCreateIdMapFromCollectionByKey() {
     List<Account> accounts = new List<Account>();
     accounts.add(
@@ -152,9 +137,6 @@ public with sharing class UtilitiesTest {
   }
 
   @isTest
-  /**
-   * @description This method is used to test the functionality of the 'createStringMapFromCollectionByKey' method.
-   */
   static void testCreateStringMapFromCollectionByKey() {
     List<Account> accounts = new List<Account>();
     accounts.add(
@@ -201,9 +183,6 @@ public with sharing class UtilitiesTest {
   }
 
   @isTest
-  /**
-   * @description This method is used to test the functionality of the 'createMapFromCollectionWithCollectionValues' method.
-   */
   static void testCreateMapFromCollectionWithCollectionValues() {
     List<Contact> contacts = (List<Contact>) TestFactory.createSObjectList(
       new Contact(),
@@ -229,9 +208,6 @@ public with sharing class UtilitiesTest {
   }
 
   @isTest
-  /**
-   * @description This method is used to test the functionality of the 'generateRandomCounter' method.
-   */
   static void testGenerateRandomCounter() {
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
@@ -254,9 +230,6 @@ public with sharing class UtilitiesTest {
   }
 
   @isTest
-  /**
-   * @description This method is used to test the functionality of the 'generateUUID' method.
-   */
   static void testGenerateUUID() {
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
@@ -271,9 +244,6 @@ public with sharing class UtilitiesTest {
   }
 
   @isTest
-  /**
-   * @description This method is used to test the functionality of filtering a list of SObjects based on matching IDs.
-   */
   static void testFilterSObjectListByIdWithMatchingIds() {
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
@@ -296,9 +266,6 @@ public with sharing class UtilitiesTest {
   }
 
   @isTest
-  /**
-   * @description This method tests the behavior of the 'filterSObjectListByIdWithNoMatchingIds' method when there are no matching IDs in the input SObject list.
-   */
   static void testFilterSObjectListByIdWithNoMatchingIds() {
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
@@ -321,9 +288,6 @@ public with sharing class UtilitiesTest {
   }
 
   @isTest
-  /**
-   * @description This method tests the behavior of the 'filterSObjectListById' method when an empty list is passed as input.
-   */
   static void testFilterSObjectListByIdWithEmptyList() {
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
@@ -342,9 +306,6 @@ public with sharing class UtilitiesTest {
   }
 
   @isTest
-  /**
-   * @description This method tests the behavior of the 'filterSObjectListById' method when a null list is passed as input.
-   */
   static void testFilterSObjectListByIdWithNullList() {
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
@@ -366,11 +327,6 @@ public with sharing class UtilitiesTest {
     Test.stopTest();
   }
 
-  /**
-   * @description Creates test objects of type OpportunityLineItem.
-   *
-   * @return A list of OpportunityLineItem test objects.
-   */
   private static List<OpportunityLineItem> createTestObjects() {
     // Create a list of 10 OpportunityLineItems using TestFactory
     List<OpportunityLineItem> items = (List<OpportunityLineItem>) TestFactory.createSObjectList(
@@ -384,9 +340,6 @@ public with sharing class UtilitiesTest {
   }
 
   @isTest
-  /**
-   * @description This method tests the 'getRecordTypeId' method with a valid record type.
-   */
   static void testGetRecordTypeIdValid() {
     Id recordTypeId;
     Test.startTest();
@@ -401,9 +354,6 @@ public with sharing class UtilitiesTest {
   }
 
   @isTest
-  /**
-   * @description This method tests the 'getRecordTypeId' method with an invalid record type.
-   */
   static void testGetRecordTypeIdInvalid() {
     Id recordTypeId;
     Test.startTest();

@@ -1,95 +1,82 @@
 /**
- * @description An opinionated trigger handler framework.
- * Originally by Kevin O'Hara github.com/kevinohara80/sfdc-trigger-framework
- * added andFinally minimize DML calls
- * @group Utility
- * @see TriggerHandler
- * @see Trigger
+ * @description Generic trigger-dispatcher framework (Kevin O'Hara fork).
+ *              Subclass this and override the relevant before/after hook methods;
+ *              the trigger body calls `new MyHandler().run()`.
+ *
+ *              Sharing modifier: `without sharing` is intentional — the dispatcher
+ *              itself performs no data access; sharing rules are enforced by the
+ *              calling trigger's context and the service/domain layer it invokes.
+ *              Using `with sharing` here would incorrectly restrict the dispatcher
+ *              when invoked from a system-context trigger.
+ *
+ *              Platform-cache migration (DEFERRED — Wave 4):
+ *              `loopCountMap` and `bypassedHandlers` are static class variables.
+ *              Per apex.md, cross-transaction state belongs in session platform cache.
+ *              Migration was deferred because: (1) no named cache partition is
+ *              confirmed to exist in the org; (2) the existing TriggerHandlerTest
+ *              relies on static state persisting across sequential `handler.run()`
+ *              calls within a single test method — cache isolation semantics in
+ *              test context would require a full test-suite rewrite; (3) trigger
+ *              handlers run synchronously so static state is reset between
+ *              transactions anyway, reducing the async-correctness risk cited in
+ *              apex.md. When a cache partition is provisioned, migrate both fields
+ *              and update clearCache() to flush the partition key instead.
+ * @group Triggers
+ * @author Kevin O'Hara / Zelis Engineering
+ * @since July 2024
+ * @last May 2026 — Wave 3 conformance: sharing modifier, header, exception hierarchy,
+ *                  run() decomposition, @TestVisible capitalisation, clearCache() stub.
  */
-public virtual class TriggerHandler {
-  // static map of handlername, times run() was invoked
+public virtual without sharing class TriggerHandler {
+  // Static loop-count and bypass registries.
+  // DEFERRED: should move to session platform cache (see class header).
   private static Map<String, LoopCount> loopCountMap;
   private static Set<String> bypassedHandlers;
 
-  // the current context of the trigger, overridable in tests
-  @testVisible
+  // The current context of the trigger, overridable in tests.
+  @TestVisible
   protected TriggerContext context;
 
-  // the current context of the trigger, overridable in tests
-  @testVisible
+  // Whether this instance was created inside a real trigger execution.
+  @TestVisible
   private Boolean isTriggerExecuting;
 
-  // static initialization
   static {
     loopCountMap = new Map<String, LoopCount>();
     bypassedHandlers = new Set<String>();
   }
-  /**
-   * @description Internal TriggerHandler custom exception class
-   */
-  public class TriggerHandlerException extends Exception {
-  }
 
   /**
-   * @description Constructs a trigger handler object and ensures the context
-   * is set
+   * @description Custom exception for TriggerHandler errors; extends the
+   *              module-level base so callers can catch at either granularity.
    */
+  public class TriggerHandlerException extends UtilitiesModuleException {
+  }
+
   public TriggerHandler() {
     this.setTriggerContext();
   }
 
+  // ─── Public API (frozen) ──────────────────────────────────────────────────────
+
   /**
-   * @description This is main brokering method that is called by the trigger.
-   * It's responsible for determining the proper context, and calling the
-   * correct method
-   * @example
-   * AccountTriggerHandler.run();
+   * Main entry point called by the trigger body. Validates context, enforces
+   * the loop-count ceiling, dispatches to the appropriate hook method, then
+   * calls `andFinally`.
    */
   public virtual void run() {
     if (!validateRun()) {
       return;
     }
-
     addToLoopCount();
-
-    // dispatch to the correct handler method
-    switch on context {
-      when BEFORE_INSERT {
-        this.beforeInsert();
-      }
-      when BEFORE_UPDATE {
-        this.beforeUpdate();
-      }
-      when AFTER_INSERT {
-        this.afterInsert();
-      }
-      when AFTER_UPDATE {
-        this.afterUpdate();
-      }
-      when BEFORE_DELETE {
-        this.beforeDelete();
-      }
-      when AFTER_DELETE {
-        this.afterDelete();
-      }
-      when AFTER_UNDELETE {
-        this.afterUndelete();
-      }
-    }
-
-    // call the andFinally method
+    dispatchToHook();
     this.andFinally();
   }
 
   /**
-   * @description Allows developers to prevent trigger loops, or allow
-   * a limited number of them by setting the maximum number of times
-   * this trigger is called.
-   * @param max   A valid number (generally 1) of times you'd like
-   * to allow the trigger to run.
-   * @example
-   * In the context of a TriggerHandler class,
-   * this.setMaxLoopCount(5);
+   * Prevents infinite trigger recursion by capping the number of times this
+   * handler may fire in a single transaction.
+   * @param max Maximum allowed executions (use 1 to allow exactly one run).
    */
   public void setMaxLoopCount(Integer max) {
     String handlerName = getHandlerName();
@@ -100,170 +87,192 @@ public virtual class TriggerHandler {
     }
   }
 
-  /**
-   * @description Allows developers to turn off the max loop count
-   * @example
-   * In the context of a TriggerHandler class,
-   * this.clearMaxLoopCount();
-   */
+  /** Removes the loop-count ceiling for this handler. */
   public void clearMaxLoopCount() {
     this.setMaxLoopCount(-1);
   }
 
   /**
-   * @description       Allows developers to conditionally bypass (disable)
-   * other triggers that *also* implement this triggerHandler
-   * @param handlerName Class name (String) of the trigger handler to bypass
-   * @example
-   * TriggerHandler.bypass('AccountTriggerHandler');
+   * Prevents the named handler from firing for the remainder of this transaction.
+   * @param handlerName Apex class name of the handler to suppress.
    */
   public static void bypass(String handlerName) {
     TriggerHandler.bypassedHandlers.add(handlerName);
   }
 
   /**
-   * @description       Removes a given trigger handler class name from
-   * the list of bypassed trigger handlers.
-   * @param handlerName Handler class name to remove from the bypass list
-   * @example
-   * TriggerHandler.clearBypass('AccountTriggerHandler');
+   * Re-enables a previously bypassed handler.
+   * @param handlerName Apex class name to remove from the bypass set.
    */
   public static void clearBypass(String handlerName) {
     TriggerHandler.bypassedHandlers.remove(handlerName);
   }
 
   /**
-   * @description       Allows developers to check whether a given trigger
-   * handler class is currently bypassed.
-   * @param handlerName The name of the trigger handler class to check for
-   * @return           `Boolean`
-   * @example
-   * TriggerHandler.isBypassed('AccountTriggerHandler');
+   * @param handlerName Apex class name to check.
+   * @return `Boolean` — true if the handler is currently suppressed.
    */
   public static Boolean isBypassed(String handlerName) {
     return TriggerHandler.bypassedHandlers.contains(handlerName);
   }
 
-  /**
-   * @description removes all classes from the bypass list
-   * @example
-   * Triggerhandler.clearAllBypasses();
-   */
+  /** Removes all handlers from the bypass set. */
   public static void clearAllBypasses() {
     TriggerHandler.bypassedHandlers.clear();
   }
 
-  /***************************************
-   * private instancemethods
-   ***************************************/
+  // ─── Test support ─────────────────────────────────────────────────────────────
 
   /**
-   * @description internal method to forcibly set the trigger context
+   * Resets static state between test methods.
+   * NOTE: When platform-cache migration lands (Wave 4), update this method to
+   * also flush the relevant cache partition keys.
    */
-  @testVisible
+  @TestVisible
+  static void clearCache() {
+    loopCountMap = new Map<String, LoopCount>();
+    bypassedHandlers = new Set<String>();
+  }
+
+  // ─── Private / protected instance helpers ─────────────────────────────────────
+
+  @TestVisible
   private void setTriggerContext() {
     this.setTriggerContext(null, false);
   }
 
   /**
-   * @description    Internal method for manually setting the trigger context
-   * @param ctx      The current trigger Context
-   * @param testMode Is the trigger running in a test context?
+   * @param ctx      String trigger-context token used in test mode.
+   * @param testMode When true, `ctx` drives the context instead of Trigger.*
    */
-  @testVisible
+  @TestVisible
   private void setTriggerContext(String ctx, Boolean testMode) {
     if (!Trigger.isExecuting && !testMode) {
       this.isTriggerExecuting = false;
       return;
-    } else {
-      this.isTriggerExecuting = true;
     }
+    this.isTriggerExecuting = true;
 
     if (Trigger.isExecuting && !testMode) {
-      switch on Trigger.operationType {
-        when BEFORE_INSERT {
-          context = TriggerContext.BEFORE_INSERT;
-        }
-        when BEFORE_UPDATE {
-          context = TriggerContext.BEFORE_UPDATE;
-        }
-        when BEFORE_DELETE {
-          context = TriggerContext.BEFORE_DELETE;
-        }
-        when AFTER_INSERT {
-          context = TriggerContext.AFTER_INSERT;
-        }
-        when AFTER_UPDATE {
-          context = TriggerContext.AFTER_UPDATE;
-        }
-        when AFTER_DELETE {
-          context = TriggerContext.AFTER_DELETE;
-        }
-        when AFTER_UNDELETE {
-          context = TriggerContext.AFTER_UNDELETE;
-        }
-      }
+      this.context = contextFromOperationType(Trigger.operationType);
     } else if (ctx != null && testMode) {
-      switch on ctx {
-        when 'before insert' {
-          context = TriggerContext.BEFORE_INSERT;
-        }
-        when 'before update' {
-          context = TriggerContext.BEFORE_UPDATE;
-        }
-        when 'before delete' {
-          context = TriggerContext.BEFORE_DELETE;
-        }
-        when 'after insert' {
-          context = TriggerContext.AFTER_INSERT;
-        }
-        when 'after update' {
-          context = TriggerContext.AFTER_UPDATE;
-        }
-        when 'after delete' {
-          context = TriggerContext.AFTER_DELETE;
-        }
-        when 'after undelete' {
-          context = TriggerContext.AFTER_UNDELETE;
-        }
-        when else {
-          throw new TriggerHandler.TriggerHandlerException(
-            'Unexpected trigger context set'
-          );
-        }
+      this.context = contextFromString(ctx);
+    }
+  }
+
+  /** Maps the platform TriggerOperation enum to our TriggerContext enum. */
+  private static TriggerContext contextFromOperationType(
+    System.TriggerOperation opType
+  ) {
+    switch on opType {
+      when BEFORE_INSERT {
+        return TriggerContext.BEFORE_INSERT;
+      }
+      when BEFORE_UPDATE {
+        return TriggerContext.BEFORE_UPDATE;
+      }
+      when BEFORE_DELETE {
+        return TriggerContext.BEFORE_DELETE;
+      }
+      when AFTER_INSERT {
+        return TriggerContext.AFTER_INSERT;
+      }
+      when AFTER_UPDATE {
+        return TriggerContext.AFTER_UPDATE;
+      }
+      when AFTER_DELETE {
+        return TriggerContext.AFTER_DELETE;
+      }
+      when AFTER_UNDELETE {
+        return TriggerContext.AFTER_UNDELETE;
+      }
+      when else {
+        return null;
+      }
+    }
+  }
+
+  /** Maps a test-mode string token to TriggerContext; throws on unrecognised input. */
+  private static TriggerContext contextFromString(String ctx) {
+    switch on ctx {
+      when 'before insert' {
+        return TriggerContext.BEFORE_INSERT;
+      }
+      when 'before update' {
+        return TriggerContext.BEFORE_UPDATE;
+      }
+      when 'before delete' {
+        return TriggerContext.BEFORE_DELETE;
+      }
+      when 'after insert' {
+        return TriggerContext.AFTER_INSERT;
+      }
+      when 'after update' {
+        return TriggerContext.AFTER_UPDATE;
+      }
+      when 'after delete' {
+        return TriggerContext.AFTER_DELETE;
+      }
+      when 'after undelete' {
+        return TriggerContext.AFTER_UNDELETE;
+      }
+      when else {
+        throw new TriggerHandler.TriggerHandlerException(
+          'Unexpected trigger context set'
+        );
+      }
+    }
+  }
+
+  /** Dispatches to the virtual hook matching the current context. */
+  private void dispatchToHook() {
+    switch on context {
+      when BEFORE_INSERT {
+        this.beforeInsert();
+      }
+      when BEFORE_UPDATE {
+        this.beforeUpdate();
+      }
+      when BEFORE_DELETE {
+        this.beforeDelete();
+      }
+      when AFTER_INSERT {
+        this.afterInsert();
+      }
+      when AFTER_UPDATE {
+        this.afterUpdate();
+      }
+      when AFTER_DELETE {
+        this.afterDelete();
+      }
+      when AFTER_UNDELETE {
+        this.afterUndelete();
       }
     }
   }
 
   /**
-   * @description increment the loop count
-   * @exception   Throws loop count exception if the max loop count is reached
+   * Increments the run counter for this handler and throws if the ceiling is exceeded.
    */
-  @testVisible
+  @TestVisible
   protected void addToLoopCount() {
     String handlerName = getHandlerName();
     if (TriggerHandler.loopCountMap.containsKey(handlerName)) {
-      Boolean exceeded = TriggerHandler.loopCountMap.get(handlerName)
-        .increment();
+      Boolean exceeded = TriggerHandler.loopCountMap.get(handlerName).increment();
       if (exceeded) {
         Integer max = TriggerHandler.loopCountMap.get(handlerName).max;
         throw new TriggerHandlerException(
-          'Maximum loop count of ' +
-            String.valueOf(max) +
-            ' reached in ' +
-            handlerName
+          'Maximum loop count of ' + max + ' reached in ' + handlerName
         );
       }
     }
   }
 
   /**
-   * @description make sure this trigger should continue to run
-   * @return     `Boolean`
-   * @exception   TriggerHandlerException thrown when executing outside of a
-   * trigger
+   * @return `Boolean` false when this handler is bypassed; throws when called
+   *         outside a trigger execution.
    */
-  @testVisible
+  @TestVisible
   protected Boolean validateRun() {
     if (!this.isTriggerExecuting || this.context == null) {
       throw new TriggerHandlerException(
@@ -277,106 +286,71 @@ public virtual class TriggerHandler {
   }
 
   /**
-   * @description Returns the string version of the handler class being
-   * invoked
-   * @return     `String` Name of the Handler
+   * @return `String` simple class name of the concrete handler subclass.
    */
-  @testVisible
+  @TestVisible
   private String getHandlerName() {
     return String.valueOf(this).substring(0, String.valueOf(this).indexOf(':'));
   }
 
-  /***************************************
-   * context methods
-   ***************************************/
+  // ─── Virtual hook methods (override in subclasses) ────────────────────────────
 
-  /**
-   * These methods are all intended to be overridden by
-   * individual trigger handlers. They exist here only to
-   * establish the 'software contract' that they exist.
-   */
-
-  /**
-   * @description Virtual method for the implementing class to override
-   */
-  @testVisible
+  @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void beforeInsert() {
   }
-  /**
-   * @description Virtual method for the implementing class to override
-   */
-  @testVisible
+
+  @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void beforeUpdate() {
   }
-  /**
-   * @description Virtual method for the implementing class to override
-   */
-  @testVisible
+
+  @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void beforeDelete() {
   }
-  /**
-   * @description Virtual method for the implementing class to override
-   */
-  @testVisible
+
+  @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void afterInsert() {
   }
-  /**
-   * @description Virtual method for the implementing class to override
-   */
-  @testVisible
+
+  @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void afterUpdate() {
   }
-  /**
-   * @description Virtual method for the implementing class to override
-   */
-  @testVisible
+
+  @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void afterDelete() {
   }
-  /**
-   * @description Virtual method for the implementing class to override
-   */
-  @testVisible
+
+  @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void afterUndelete() {
   }
 
-  /**
-   * @description Virtual method for the implementing class to override
-   */
-  @testVisible
+  @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void andFinally() {
   }
 
-  /***************************************
-   * inner classes
-   ***************************************/
+  // ─── Inner classes ────────────────────────────────────────────────────────────
 
-  /**
-   * @description inner class for managing the loop count per handler
-   */
-  @testVisible
+  /** Tracks per-handler run counts and enforces an optional ceiling. */
+  @TestVisible
   private class LoopCount {
     private Integer max;
     private Integer count;
 
-    /**
-     * @description Loop counter method with default of 5.
-     */
+    /** Initialises with a default ceiling of 5. */
     public LoopCount() {
       this.max = 5;
       this.count = 0;
     }
 
     /**
-     * @description Sets loop count based on the param.
-     * @param max   Maximum number of loops to allow.
+     * @param max Maximum allowed runs.
      */
     public LoopCount(Integer max) {
       this.max = max;
@@ -384,10 +358,8 @@ public virtual class TriggerHandler {
     }
 
     /**
-     * @description Increment the internal counter returning the results of
-     * this.exceeded().
-     * @return     `Boolean` true if count will exceed max count or is less
-     * than 0.
+     * Increments the counter and returns whether the ceiling has been breached.
+     * @return `Boolean`
      */
     public Boolean increment() {
       this.count++;
@@ -395,48 +367,33 @@ public virtual class TriggerHandler {
     }
 
     /**
-     * @description Determines if this we're about to exceed the loop count.
-     * @return     `Boolean` true if less than 0 or more than max.
+     * @return `Boolean` true when count exceeds max (max < 0 means unlimited).
      */
     public Boolean exceeded() {
       if (this.max < 0) {
         return false;
       }
-      if (this.count > this.max) {
-        return true;
-      }
-      return false;
+      return this.count > this.max;
     }
 
-    /**
-     * @description Returns the max loop count.
-     * @return     `Integer` max loop count.
-     */
+    /** @return `Integer` configured maximum. */
     public Integer getMax() {
       return this.max;
     }
 
-    /**
-     * @description Returns the current loop count.
-     * @return     `Integer` current loop count.
-     */
+    /** @return `Integer` current run count. */
     public Integer getCount() {
       return this.count;
     }
 
-    /**
-     * @description Sets the max loop size
-     * @param max   The integer to set max to.
-     */
+    /** @param max New ceiling value. */
     public void setMax(Integer max) {
       this.max = max;
     }
   }
 
-  /**
-   * @description possible trigger contexts
-   */
-  @testVisible
+  /** Enumerates all valid trigger event contexts. */
+  @TestVisible
   public enum TriggerContext {
     BEFORE_INSERT,
     BEFORE_UPDATE,

@@ -1,12 +1,13 @@
-@isTest
 /**
- * @description This is a test class for the RestClient class.
- * It is used to test the functionality of the RestClient class.
- *
+ * @description Test class for RestClient.
+ * @group REST
+ * @see RestClient
  * @author David Wood
  * @since 2024-03-16
+ * @last May 2026 — Wave 6 conformance
  */
-private class RestClientTest {
+@isTest
+private without sharing class RestClientTest {
   @TestSetup
   static void makeData() {
     TestFactory.createTestUser();
@@ -34,7 +35,7 @@ private class RestClientTest {
       RestClient.class,
       'Expected the instance to be of type RestClient'
     );
-    System.Assert.areEqual(
+    Assert.areEqual(
       'dummyNamedCredential',
       rc.namedCredentialName,
       'Expected the name credential to match'
@@ -63,7 +64,7 @@ private class RestClientTest {
       );
       Test.stopTest();
 
-      System.Assert.areEqual(
+      Assert.areEqual(
         200,
         response.getStatusCode(),
         'Expected the return status code to be 200'
@@ -91,7 +92,7 @@ private class RestClientTest {
       );
       Test.stopTest();
 
-      System.Assert.areEqual(
+      Assert.areEqual(
         200,
         response.getStatusCode(),
         'Expected the return status code to be 200'
@@ -119,7 +120,7 @@ private class RestClientTest {
       );
       Test.stopTest();
 
-      System.Assert.areEqual(
+      Assert.areEqual(
         200,
         response.getStatusCode(),
         'Expected the return status code to be 200'
@@ -143,7 +144,7 @@ private class RestClientTest {
       HttpResponse response = rc.put('/', '{"Id": "003ae3fn12df25k309"}');
       Test.stopTest();
 
-      System.Assert.areEqual(
+      Assert.areEqual(
         201,
         response.getStatusCode(),
         'Expected to get the 201 response code'
@@ -171,7 +172,7 @@ private class RestClientTest {
       );
       Test.stopTest();
 
-      System.Assert.areEqual(
+      Assert.areEqual(
         200,
         response.getStatusCode(),
         'Expected to get the 200 response code'
@@ -195,7 +196,7 @@ private class RestClientTest {
       HttpResponse response = rc.get('/', '?test');
       Test.stopTest();
 
-      System.Assert.areEqual(
+      Assert.areEqual(
         200,
         response.getStatusCode(),
         'Expected to get the 200 response code'
@@ -219,7 +220,7 @@ private class RestClientTest {
       HttpResponse response = rc.del('/');
       Test.stopTest();
 
-      System.Assert.areEqual(
+      Assert.areEqual(
         200,
         response.getStatusCode(),
         'Expected to get the 200 response code'
@@ -243,7 +244,7 @@ private class RestClientTest {
       HttpResponse response = rc.del('/', 'Delete Body');
       Test.stopTest();
 
-      System.Assert.areEqual(
+      Assert.areEqual(
         200,
         response.getStatusCode(),
         'Expected to get the 200 response code'
@@ -271,7 +272,7 @@ private class RestClientTest {
       );
       Test.stopTest();
 
-      System.Assert.areEqual(
+      Assert.areEqual(
         201,
         response.getStatusCode(),
         'Expected to get the 201 response code'
@@ -295,7 +296,7 @@ private class RestClientTest {
       HttpResponse response = rc.post('/', '{"Id": "003ae3fn12df25k309"}');
       Test.stopTest();
 
-      System.Assert.areEqual(
+      Assert.areEqual(
         201,
         response.getStatusCode(),
         'Expected to get the 201 response code'
@@ -319,7 +320,7 @@ private class RestClientTest {
       HttpResponse response = rc.patch('/', '{"Id": "003ae3fn12df25k309"}');
       Test.stopTest();
 
-      System.Assert.areEqual(
+      Assert.areEqual(
         201,
         response.getStatusCode(),
         'Expected to get the 201 response code'
@@ -347,7 +348,7 @@ private class RestClientTest {
       );
       Test.stopTest();
 
-      System.Assert.areEqual(
+      Assert.areEqual(
         201,
         response.getStatusCode(),
         'Expected to get the 201 response code'

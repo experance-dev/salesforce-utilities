@@ -1,37 +1,50 @@
 /**
- * @description This class provides an intelligent abstraction for
- * making REST callouts to external endpoints. It utilizes NamedCredentials
- * for security. This class is designated as Virtual so that
- * API Service classes can extend it, and make use of it's methods easily.
+ * @description Intelligent abstraction for making REST callouts to external
+ *              endpoints via Named Credentials. Designated virtual so that
+ *              API Service classes can extend and reuse its methods.
+ *              Also exposes static convenience wrappers for one-off callouts
+ *              where a full service subclass is unnecessary.
  *
- * This class also provides static methods - so that the abstractions
- * provided can be used in a one-off or ad-hoc manner for situations
- * where a full API Service class isn't needed.
- *
+ *              Sharing: declared `with sharing` so that user-initiated callouts
+ *              respect the running user's record-visibility context. REST
+ *              clients do not issue SOQL/DML directly, but `with sharing`
+ *              ensures any future platform-security additions (e.g. ConnectApi)
+ *              inherit the correct context by default.
+ * @group REST
+ * @author David Wood
+ * @since June 2024
+ * @last May 2026 — Wave 5 conformance: added `with sharing`, RestClientException,
+ *                  Logger.logException wrapping, stripped method-level @description,
+ *                  removed dead commented-out code.
  */
-public virtual class RestClient {
+public with sharing virtual class RestClient {
   /**
-   * @description This property determines whether a trailing slash should be added to the URL priory to
-   * query parameters.
+   * @description Custom exception for all RestClient callout failures.
+   */
+  public class RestClientException extends UtilitiesModuleException {}
+
+  /**
+   * This property determines whether a trailing slash should be added to the
+   * URL prior to query parameters.
    */
   @testVisible
   protected Boolean addSlash;
 
   /**
-   * @description This property determines whether to encoude the query parameters in the URL.
+   * This property determines whether to encode the query parameters in the URL.
    */
   @testVisible
   protected Boolean encodeQuery;
 
   /**
-   * @description The name of the Named Credential to use
+   * The name of the Named Credential to use.
    */
   @testVisible
   protected String namedCredentialName { get; set; }
 
   /**
-   * @description This ENUM lists possible HTTP Verbs. Note: 'Delete' is an Apex Keyword (DML)
-   * and as a result, the ENUM value 'DEL' is used for delete.
+   * Lists possible HTTP verbs. Note: 'Delete' is an Apex keyword (DML),
+   * so the enum value 'DEL' is used for delete operations.
    */
   public enum HttpVerb {
     GET,
@@ -43,7 +56,7 @@ public virtual class RestClient {
   }
 
   /**
-   * @description The default headers to use, when none are specified
+   * The default headers applied when no custom headers are specified.
    */
   @testVisible
   @SuppressWarnings('PMD.FieldDeclarationsShouldBeAtStart')
@@ -52,9 +65,10 @@ public virtual class RestClient {
     'Accept' => 'application/json'
   };
 
+  // ─── Constructors ─────────────────────────────────────────────────────────
+
   /**
-   * @description Constructor that sets Named Credential
-   * @param  namedCredential name of the Named Credential to use
+   * @param namedCredential Name of the Named Credential to use
    */
   public RestClient(String namedCredential) {
     this.namedCredentialName = namedCredential;
@@ -63,9 +77,8 @@ public virtual class RestClient {
   }
 
   /**
-   * @description Constructor that sets Named Credential and whether to add trailing slash
    * @param namedCredential Name of the Named Credential to use
-   * @param addSlash Whether to add a trailing slash to the URL
+   * @param addSlash        Whether to add a trailing slash to the URL
    */
   public RestClient(String namedCredential, Boolean addSlash) {
     this.namedCredentialName = namedCredential;
@@ -74,10 +87,9 @@ public virtual class RestClient {
   }
 
   /**
-   * @description Constructor that sets Named Credential, whether to add trailing slash, and whether to encode query parameters
    * @param namedCredential Name of the Named Credential to use
-   * @param addSlash Whether to add a trailing slash to the URL
-   * @param encodeQuery Whether to encode the query parameters in the URL
+   * @param addSlash        Whether to add a trailing slash to the URL
+   * @param encodeQuery     Whether to encode the query parameters in the URL
    */
   public RestClient(
     String namedCredential,
@@ -90,11 +102,10 @@ public virtual class RestClient {
   }
 
   /**
-   * @description Constructor that sets Named Credential, custom headers, and whether to add trailing slash
    * @param namedCredential Name of the Named Credential to use
-   * @param headers Custom headers to use
-   * @param addSlash Whether to add a trailing slash to the URL
-   * @param encodeQuery Whether to encode the query parameters in the URL
+   * @param headers         Custom headers to merge into defaults
+   * @param addSlash        Whether to add a trailing slash to the URL
+   * @param encodeQuery     Whether to encode the query parameters in the URL
    */
   @SuppressWarnings('PMD.ExcessiveParameterList')
   public RestClient(
@@ -110,10 +121,9 @@ public virtual class RestClient {
   }
 
   /**
-   * @description Constructor that sets Named Credential, custom headers, and whether to add trailing slash
    * @param namedCredential Name of the Named Credential to use
-   * @param headers Custom headers to use
-   * @param addSlash Whether to add a trailing slash to the URL
+   * @param headers         Custom headers to merge into defaults
+   * @param addSlash        Whether to add a trailing slash to the URL
    */
   @SuppressWarnings('PMD.ExcessiveParameterList')
   public RestClient(
@@ -128,28 +138,24 @@ public virtual class RestClient {
   }
 
   /**
-   * @description This constructor isn't intended for use, which is why it's
-   * access modifier is 'Protected'. However, any child class extending
-   * this class will either have to implement constructors matching the one
-   * above, or this constructor must exist. In order to make this abstraction
-   * as useful as possible, we've elected to leave this constructor here,
-   * but unavailable to anything but inner classes and classes that
-   * extend this one.
+   * Protected no-arg constructor retained so subclasses that do not need a
+   * Named Credential are not forced to forward one. Not intended for direct
+   * instantiation outside the class hierarchy.
    */
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected RestClient() {
   }
 
+  // ─── Core callout ─────────────────────────────────────────────────────────
+
   /**
-   * @description Omnibus callout method. This is the primary method for
-   * making a REST callout. Most of the other methods in this class serve
-   * as convient, syntactic sugar on this method.
-   * @param   method Enum HTTP verb to use. i.e. GET
-   * @param   path patch component of the callout url i.e. `/services/data/v39.0/SObjects`
-   * @param   query Query portion of the URL i.e. `?q=SELECT Id FROM Account`
-   * @param   body JSON string representing the body of the callout in post/patch situations
-   * @param   headers A map<String,String> of headers to use while making this callout
-   * @return HttpResponse  HttpResponse Obj
+   * Omnibus callout method. All convenience wrappers ultimately delegate here.
+   * @param method  HTTP verb enum (e.g. GET)
+   * @param path    Path component of the URL (e.g. `/services/data/v39.0/SObjects`)
+   * @param query   Query string (e.g. `q=SELECT Id FROM Account`)
+   * @param body    JSON body for POST/PUT/PATCH calls
+   * @param headers Request headers; pass null to use defaults
+   * @return        HttpResponse from the remote endpoint
    */
   @testVisible
   @SuppressWarnings('PMD.ExcessiveParameterList')
@@ -160,37 +166,219 @@ public virtual class RestClient {
     String body,
     Map<String, String> headers
   ) {
-    HttpRequest apiRequest = new HttpRequest();
-    path = ensureStringEndsInSlash(path);
-    String encodedQuery = encodeQueryIfNeeded(query);
-    method = adjustHttpMethodForPatch(method, encodedQuery);
-    setHeadersAndBody(apiRequest, headers, method, body);
-    apiRequest.setMethod(getHttpMethodString(method));
-    apiRequest.setEndpoint(
-      'callout:' + this.namedCredentialName + path + encodedQuery
+    try {
+      HttpRequest apiRequest = new HttpRequest();
+      path = ensureStringEndsInSlash(path);
+      String encodedQuery = encodeQueryIfNeeded(query);
+      method = adjustHttpMethodForPatch(method, encodedQuery);
+      setHeadersAndBody(apiRequest, headers, method, body);
+      apiRequest.setMethod(getHttpMethodString(method));
+      apiRequest.setEndpoint(
+        'callout:' + this.namedCredentialName + path + encodedQuery
+      );
+      Http http = new Http();
+      return http.send(apiRequest);
+    } catch (Exception e) {
+      Logger.logException(e, 'RestClient', 'makeApiCall');
+      throw new RestClientException(
+        'Callout failed [' +
+          this.namedCredentialName +
+          path +
+          ']: ' +
+          e.getMessage() +
+          ' - ' +
+          e.getStackTraceString()
+      );
+    }
+  }
+
+  // ─── Convenience overloads ────────────────────────────────────────────────
+
+  /**
+   * Convenience overload — uses default headers.
+   * @param method HTTP verb
+   * @param path   Path component
+   * @param query  Query string
+   * @param body   Request body
+   * @return       HttpResponse
+   */
+  @testVisible
+  @SuppressWarnings('PMD.ExcessiveParameterList')
+  protected HttpResponse makeApiCall(
+    HttpVerb method,
+    String path,
+    String query,
+    String body
+  ) {
+    return this.makeApiCall(
+      method,
+      path,
+      query,
+      body,
+      RestClient.defaultHeaders
     );
-    Http http = new Http();
-    HttpResponse toReturn = http.send(apiRequest);
-    return toReturn;
   }
 
   /**
-   * @description Encodes the query string if encoding is needed.
-   *
-   * @param query The query string to potentially encode.
-   * @return String The encoded or original query string.
+   * Convenience overload — no body, uses default headers.
+   * @param method HTTP verb
+   * @param path   Path component
+   * @param query  Query string
+   * @return       HttpResponse
+   */
+  @testVisible
+  protected HttpResponse makeApiCall(
+    HttpVerb method,
+    String path,
+    String query
+  ) {
+    return this.makeApiCall(method, path, query, '', RestClient.defaultHeaders);
+  }
+
+  /**
+   * Convenience overload — no body or query, uses default headers.
+   * @param method HTTP verb
+   * @param path   Path component
+   * @return       HttpResponse
+   */
+  @testVisible
+  protected HttpResponse makeApiCall(HttpVerb method, String path) {
+    return this.makeApiCall(method, path, '', '', RestClient.defaultHeaders);
+  }
+
+  // ─── Verb shortcuts ───────────────────────────────────────────────────────
+
+  /**
+   * @param path Path component of the URL
+   * @return     HttpResponse
+   */
+  @testVisible
+  protected HttpResponse get(String path) {
+    return this.makeApiCall(HttpVerb.GET, path);
+  }
+
+  /**
+   * @param path  Path component of the URL
+   * @param query Query string
+   * @return      HttpResponse
+   */
+  @testVisible
+  protected HttpResponse get(String path, String query) {
+    return this.makeApiCall(HttpVerb.GET, path, query);
+  }
+
+  /**
+   * @param path Path component of the URL
+   * @return     HttpResponse
+   */
+  @testVisible
+  protected HttpResponse del(String path) {
+    return this.makeApiCall(HttpVerb.DEL, path);
+  }
+
+  /**
+   * @param path  Path component of the URL
+   * @param query Query string
+   * @return      HttpResponse
+   */
+  @testVisible
+  protected HttpResponse del(String path, String query) {
+    return this.makeApiCall(HttpVerb.DEL, path, query);
+  }
+
+  /**
+   * @param path Path component of the URL
+   * @param body JSON request body
+   * @return     HttpResponse
+   */
+  @testVisible
+  protected HttpResponse post(String path, String body) {
+    return this.makeApiCall(HttpVerb.POST, path, '', body);
+  }
+
+  /**
+   * @param path  Path component of the URL
+   * @param query Query string
+   * @param body  JSON request body
+   * @return      HttpResponse
+   */
+  @testVisible
+  protected HttpResponse post(String path, String query, String body) {
+    return this.makeApiCall(HttpVerb.POST, path, query, body);
+  }
+
+  /**
+   * @param path Path component of the URL
+   * @param body JSON request body
+   * @return     HttpResponse
+   */
+  @testVisible
+  protected HttpResponse put(String path, String body) {
+    return this.makeApiCall(HttpVerb.PUT, path, '', body);
+  }
+
+  /**
+   * @param path  Path component of the URL
+   * @param query Query string
+   * @param body  JSON request body
+   * @return      HttpResponse
+   */
+  @testVisible
+  protected HttpResponse put(String path, String query, String body) {
+    return this.makeApiCall(HttpVerb.PUT, path, query, body);
+  }
+
+  /**
+   * @param path Path component of the URL
+   * @param body JSON request body
+   * @return     HttpResponse
+   */
+  @testVisible
+  protected HttpResponse patch(String path, String body) {
+    return this.makeApiCall(HttpVerb.PATCH, path, '', body);
+  }
+
+  /**
+   * @param path  Path component of the URL
+   * @param query Query string
+   * @param body  JSON request body
+   * @return      HttpResponse
+   */
+  @testVisible
+  protected HttpResponse patch(String path, String query, String body) {
+    return this.makeApiCall(HttpVerb.PATCH, path, query, body);
+  }
+
+  // ─── Private helpers ──────────────────────────────────────────────────────
+
+  /**
+   * Appends a trailing `/` when `addSlash` is true and the path does not
+   * already end in one, making callout URLs more robust against missing slashes.
+   * @param resource Path string to normalise
+   * @return         Path ending in `/` (or unchanged if already correct)
+   */
+  @testVisible
+  protected String ensureStringEndsInSlash(String resource) {
+    if (!this.addSlash || resource.endsWith('/')) {
+      return resource;
+    }
+    return resource + '/';
+  }
+
+  /**
+   * @param query Raw query string
+   * @return      URL-encoded query string, or original when encoding is disabled
    */
   private String encodeQueryIfNeeded(String query) {
     return this.encodeQuery ? EncodingUtil.urlEncode(query, 'UTF-8') : query;
   }
 
   /**
-   * @description Adjusts the HTTP method to POST if the original method is PATCH and appends
-   * a specific query parameter to indicate the PATCH request.
-   *
-   * @param method The original HTTP method.
-   * @param encodedQuery The query string to append the PATCH indicator to, if necessary.
-   * @return HttpVerb The adjusted HTTP method.
+   * Salesforce's HTTP library does not support PATCH natively. We simulate it
+   * by sending POST and appending `?_HttpMethod=PATCH` to the query string.
+   * @param method       Incoming HTTP verb
+   * @param encodedQuery Mutable query string (PATCH indicator is appended here)
+   * @return             POST when original method was PATCH, otherwise unchanged
    */
   private HttpVerb adjustHttpMethodForPatch(
     HttpVerb method,
@@ -204,12 +392,10 @@ public virtual class RestClient {
   }
 
   /**
-   * @description Sets the headers and body of an HTTP request.
-   *
-   * @param request The HTTP request to set the headers and body on.
-   * @param headers A map of header names to header values to set on the request.
-   * @param method The HTTP method of the request.
-   * @param body The body of the request, if applicable for the HTTP method.
+   * @param request The HttpRequest to configure
+   * @param headers Header map; null falls back to defaultHeaders
+   * @param method  HTTP verb (determines whether body is set)
+   * @param body    Request body string
    */
   @SuppressWarnings('PMD.ExcessiveParameterList')
   private void setHeadersAndBody(
@@ -235,250 +421,29 @@ public virtual class RestClient {
   }
 
   /**
-   * @description Converts the HttpVerb enum to a string value for the HttpRequest.
-   *
-   * @param method The HTTP method enum.
-   * @return String The string representation of the HTTP method.
+   * @param method HTTP verb enum value
+   * @return       String representation safe for HttpRequest.setMethod()
    */
   private String getHttpMethodString(HttpVerb method) {
     return (method == HttpVerb.DEL) ? 'DELETE' : String.valueOf(method);
   }
 
-  /**
-   * @description  Makes an HTTP Callout to an api resource.
-   * Convienence method that assumes the Default Headers.
-   * @param method HTTPVerb to use. See the enum above.
-   * @param path   Http path component of the URL. ie: `/path/to/resource`
-   * @param query  Query component of the URL ie: after `?foo=bar`
-   * @param body   Body to send with this call.
-   * @return      `HttpResponse`
-   */
-  @testVisible
-  @SuppressWarnings('PMD.ExcessiveParameterList')
-  protected HttpResponse makeApiCall(
-    HttpVerb method,
-    String path,
-    String query,
-    String body
-  ) {
-    return this.makeApiCall(
-      method,
-      path,
-      query,
-      body,
-      RestClient.defaultHeaders
-    );
-  }
+  // ─── Static wrappers ──────────────────────────────────────────────────────
 
   /**
-   * @description  convenience version of makeApiCall without body param.
-   * Invokes omnibus version above, with blank body param and default headers.
-   * @param method HTTPVerb to use. See the enum above.
-   * @param path   Http path component of the URL. ie: `/path/to/resource`
-   * @param query  Query component of the URL ie: after `?foo=bar`
-   * @return      `HTTPResponse`
-   */
-  @testVisible
-  protected HttpResponse makeApiCall(
-    HttpVerb method,
-    String path,
-    String query
-  ) {
-    return this.makeApiCall(method, path, query, '', RestClient.defaultHeaders);
-  }
-
-  /**
-   * @description  convenience version of makeApiCall without body or query
-   * params.
-   * Invokes omnibus version above, with blank body and query params
-   * @param method HTTPVerb to use. See the enum above.
-   * @param path   Http path component of the URL. ie: `/path/to/resource`
-   * @return      `HTTPResponse`
-   */
-  @testVisible
-  protected HttpResponse makeApiCall(HttpVerb method, String path) {
-    return this.makeApiCall(method, path, '', '', RestClient.defaultHeaders);
-  }
-
-  // @testVisible
-  // /**
-  //  * @description Retrieves an HTTP response using the GET method.
-  //  *
-  //  * @param path The path of the resource.
-  //  * @param query The query string parameters.
-  //  * @param headers The headers to include in the request.
-  //  * @return The HTTP response.
-  //  */
-  // protected HttpResponse getOld(String path, String query, Map<String, String> headers) {
-  //     headers.putAll(RestClient.defaultHeaders);
-  //     return this.makeApiCall(HttpVerb.GET, path, query, '', RestClient.defaultHeaders);
-  // }
-
-  // /**
-  //  * @description Retrieves an HTTP response using the GET method.
-  //  *
-  //  * @param path The path of the resource.
-  //  * @param headers The headers to include in the request.
-  //  * @return The HTTP response.
-  //  */
-  // @testVisible
-  // protected HttpResponse getOld(String path, Map<String, String> headers) {
-  //     headers.putAll(RestClient.defaultHeaders);
-  //     return this.makeApiCall(HttpVerb.GET, path, '', '', RestClient.defaultHeaders);
-  // }
-
-  /**
-   * @description convenience method for a GET Call that only requires a path
-   * @param path   Http path component of the URL. ie: `/path/to/resource`
-   * @return     `HTTPResponse`
-   */
-  @testVisible
-  protected HttpResponse get(String path) {
-    return this.makeApiCall(HttpVerb.GET, path);
-  }
-
-  /**
-   * @description convenience method for a GET Call that only requires a path
-   * and query
-   * @param path   Http path component of the URL. ie: `/path/to/resource`
-   * @param query  Query component of the URL ie: after `?foo=bar`
-   * @return     `HTTPResponse`
-   */
-  @testVisible
-  protected HttpResponse get(String path, String query) {
-    return this.makeApiCall(HttpVerb.GET, path, query);
-  }
-
-  /**
-   * @description convenience method for deleteing a resource based only on
-   * path
-   * @param path   Http path component of the URL. ie: `/path/to/resource`
-   * @return     `HTTPResponse`
-   */
-  @testVisible
-  protected HttpResponse del(String path) {
-    return this.makeApiCall(HttpVerb.DEL, path);
-  }
-
-  /**
-   * @description convenience method for a Delete Call that only requires a
-   * path and query
-   * @param path   Http path component of the URL. ie: `/path/to/resource`
-   * @param query  Query component of the URL ie: after `?foo=bar`
-   * @return     `HTTPResponse`
-   */
-  @testVisible
-  protected HttpResponse del(String path, String query) {
-    return this.makeApiCall(HttpVerb.DEL, path, query);
-  }
-
-  /**
-   * @description convenience method for a POST Call that only requires a path
-   * and body
-   * @param path   Http path component of the URL. ie: `/path/to/resource`
-   * @param body   JSON string to post
-   * @return     `HTTPResponse`
-   */
-  @testVisible
-  protected HttpResponse post(String path, String body) {
-    return this.makeApiCall(HttpVerb.POST, path, '', body);
-  }
-
-  /**
-   * @description convenience method for a POST Call that only requires a
-   * path, query and body
-   * @param path   Http path component of the URL. ie: `/path/to/resource`
-   * @param query  Query component of the URL ie: after `?foo=bar`
-   * @param body   JSON string to post
-   * @return     `HTTPResponse`
-   */
-  @testVisible
-  protected HttpResponse post(String path, String query, String body) {
-    return this.makeApiCall(HttpVerb.POST, path, query, body);
-  }
-
-  /**
-   * @description convenience method for a PUT Call that only requires a path
-   * and body
-   * @param path   Http path component of the URL. ie: `/path/to/resource`
-   * @param body   JSON string to post
-   * @return     `HTTPResponse`
-   */
-  @testVisible
-  protected HttpResponse put(String path, String body) {
-    return this.makeApiCall(HttpVerb.PUT, path, '', body);
-  }
-
-  /**
-   * @description convenience method for a PUT Call that only requires a path,
-   * query and body
-   * @param path   Http path component of the URL. ie: `/path/to/resource`
-   * @param query  Query component of the URL ie: after `?foo=bar`
-   * @param body   JSON string to post
-   * @return     `HTTPResponse`
-   */
-  @testVisible
-  protected HttpResponse put(String path, String query, String body) {
-    return this.makeApiCall(HttpVerb.PUT, path, query, body);
-  }
-
-  /**
-   * @description convenience method for a PATCH Call that only requires a
-   * path, query and body
-   * @param path   Http path component of the URL. ie: `/path/to/resource`
-   * @param body   JSON string to post
-   * @return     `HTTPResponse`
-   */
-  @testVisible
-  protected HttpResponse patch(String path, String body) {
-    return this.makeApiCall(HttpVerb.PATCH, path, '', body);
-  }
-
-  /**
-   * @description convenience method for a PATCH Call that only requires a
-   * path, query and body
-   * @param path   Http path component of the URL. ie: `/path/to/resource`
-   * @param query  Query component of the URL ie: after `?foo=bar`
-   * @param body   JSON string to post
-   * @return     `HTTPResponse`
-   */
-  @testVisible
-  protected HttpResponse patch(String path, String query, String body) {
-    return this.makeApiCall(HttpVerb.PATCH, path, query, body);
-  }
-
-  // Private Helper Methods
-  /**
-   * @description Ensures that the inputted string ends in a `/`
-   * makes callouts more robust.
-   * @param   resource string to ensure ends in `/`
-   * @return  inputted string with `/` if it didn't already end in one.
-   */
-  @testVisible
-  protected String ensureStringEndsInSlash(String resource) {
-    if (!this.addSlash || resource.endsWith('/')) {
-      return resource;
-    }
-    return resource + '/';
-  }
-
-  /**
-   * @description           A static wrapper for the main makeApiCall method
-   * @param namedCredential The named credential to use
-   * @param method          HTTPVerb enum value. See Enum above
-   * @param path           Http path component of the URL. ie: `/path/to/resource`
-   * @param query           Query component of the URL ie: after `?foo=bar`
-   * @param body            JSON string to post
-   * @param headers         Map<String,String> representing outgoing Request
-   * headers
-   * @return               `HTTPResponse`
+   * Static convenience wrapper — full signature.
+   * @param namedCredential Named Credential to use
+   * @param method          HTTP verb enum
+   * @param path            Path component of the URL
+   * @param query           Query string
+   * @param body            JSON request body
+   * @param headers         Request headers
+   * @return                HttpResponse
    * @example
-   * System.Debug(RestClient.makeApiCall('MockBin',
-   *                                      RestClient.HttpVerb.GET,
-   *                                      '4cb453a6-a23b-42ea-a6ba-9be1c1f17050',
-   *                                      '',
-   *                                      '',
-   *                                      new Map<String,String>()));
+   * HttpResponse res = RestClient.makeApiCall(
+   *     'MockBin', RestClient.HttpVerb.GET,
+   *     '4cb453a6-a23b-42ea-a6ba-9be1c1f17050', '', '',
+   *     new Map<String,String>());
    */
   @SuppressWarnings('PMD.ExcessiveParameterList')
   public static HttpResponse makeApiCall(
@@ -494,18 +459,16 @@ public virtual class RestClient {
   }
 
   /**
-   * @description           A static wrapper for the main makeApiCall method
-   * that assumes default headers.
-   * @param namedCredential The named credential to use
-   * @param method          HTTPVerb enum value. See Enum above
-   * @param path           Http path component of the URL. ie: `/path/to/resource`
-   * @param query           Query component of the URL ie: after `?foo=bar`
-   * @return               `HTTPResponse`
+   * Static convenience wrapper — no body, uses default headers.
+   * @param namedCredential Named Credential to use
+   * @param method          HTTP verb enum
+   * @param path            Path component of the URL
+   * @param query           Query string
+   * @return                HttpResponse
    * @example
-   * System.Debug(RestClient.makeApiCall('MockBin',
-   *                                      RestClient.HttpVerb.GET,
-   *                                      '4cb453a6-a23b-42ea-a6ba-9be1c1f17050',
-   *                                      ''));
+   * HttpResponse res = RestClient.makeApiCall(
+   *     'MockBin', RestClient.HttpVerb.GET,
+   *     '4cb453a6-a23b-42ea-a6ba-9be1c1f17050', '');
    */
   @SuppressWarnings('PMD.ExcessiveParameterList')
   public static HttpResponse makeApiCall(
@@ -519,16 +482,15 @@ public virtual class RestClient {
   }
 
   /**
-   * @description           A static wrapper for the main makeApiCall method
-   * where you only need the path
-   * @param namedCredential The named credential to use
-   * @param method          HTTPVerb enum value. See Enum above
-   * @param path           Http path component of the URL. ie: `/path/to/resource`
-   * @return               `HTTPResponse`
+   * Static convenience wrapper — path only, uses default headers.
+   * @param namedCredential Named Credential to use
+   * @param method          HTTP verb enum
+   * @param path            Path component of the URL
+   * @return                HttpResponse
    * @example
-   * System.Debug(RestClient.makeApiCall('MockBin',
-   *                                      RestClient.HttpVerb.GET,
-   *                                      '4cb453a6-a23b-42ea-a6ba-9be1c1f17050'));
+   * HttpResponse res = RestClient.makeApiCall(
+   *     'MockBin', RestClient.HttpVerb.GET,
+   *     '4cb453a6-a23b-42ea-a6ba-9be1c1f17050');
    */
   public static HttpResponse makeApiCall(
     String namedCredential,

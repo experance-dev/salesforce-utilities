@@ -1,28 +1,25 @@
 /**
- * @description Mock implementation of LogCleanupContext for testing purposes.
- * @group Log Management
- * @author David
+ * @description Test double for `LogCleanupContext`; returns caller-supplied
+ *              retention data so batch tests never touch custom metadata.
+ * @group LogCleanup
+ * @author David Wood
  * @since November 2024
- * @last November 2024 - Updated class annotations.
+ * @last May 2026 — conformance refactor: explicit sharing, header cleanup.
  */
 @IsTest
-public class MockLogCleanupContext extends LogCleanupContext {
+public without sharing class MockLogCleanupContext extends LogCleanupContext {
   private Map<String, Integer> mockRetentionDays;
 
   /**
-   * @description Constructor for MockLogCleanupContext.
+   * @description Constructs the mock with a fixed retention map.
    *
-   * @param mockRetentionDays A map containing retention days for different log types.
+   * @param mockRetentionDays Map of SObject API names to retention days to return.
    */
   public MockLogCleanupContext(Map<String, Integer> mockRetentionDays) {
     this.mockRetentionDays = mockRetentionDays;
   }
 
-  /**
-   * @description Overrides the retention days retrieval to return mock data.
-   *
-   * @return Map of log object names to their respective mock retention days.
-   */
+  /** @return The retention map supplied at construction time. */
   public override Map<String, Integer> getLogRetentionDays() {
     return mockRetentionDays;
   }

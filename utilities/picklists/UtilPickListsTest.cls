@@ -1,22 +1,19 @@
 /**
  * @description Test class for UtilPickLists. Ensures that picklist utility functions work as expected,
- * covering both positive scenarios and edge cases. Designed to be understandable for junior programmers.
+ * covering both positive scenarios and edge cases.
+ * @group Picklists
+ * @see UtilPickLists
+ * @author Zelis
+ * @since 2024
+ * @last May 2026 — Wave 6 conformance
  */
 @isTest
-public with sharing class UtilPickListsTest {
-  /**
-   * @description Sets up essential data before running the tests. It creates a user with minimal access,
-   * which is used to simulate a more restrictive user context for the tests.
-   */
+public without sharing class UtilPickListsTest {
   @TestSetup
   static void makeData() {
     TestFactory.createMinAccessUser(true); // Create a user with minimal permissions.
   }
 
-  /**
-   * @description Tests retrieving picklist values for a specific field on an sObject.
-   * Validates that the retrieved list of picklist values is not null.
-   */
   @isTest
   static void testGetPicklistValues() {
     Test.startTest();
@@ -36,10 +33,6 @@ public with sharing class UtilPickListsTest {
     Test.stopTest();
   }
 
-  /**
-   * @description Tests retrieving a map of picklist API names to their labels for a specific field on an sObject, using the field reference directly.
-   * Validates that the retrieved map is not null.
-   */
   @isTest
   static void testGetActivePickListValuesMapWithLabelsFromSObjectField() {
     Test.startTest();
@@ -58,10 +51,6 @@ public with sharing class UtilPickListsTest {
     Test.stopTest();
   }
 
-  /**
-   * @description Tests retrieving a matching picklist value from an sObject field, considering case sensitivity.
-   * Validates that the correct value is returned both when case sensitivity is enabled and disabled.
-   */
   @isTest
   static void testGetPickListValue() {
     Test.startTest();
@@ -87,10 +76,6 @@ public with sharing class UtilPickListsTest {
     Test.stopTest();
   }
 
-  /**
-   * @description Performs negative testing on picklist value retrieval, covering scenarios like null fields,
-   * non-picklist fields, and empty search strings. Validates that an empty string is returned in these cases.
-   */
   @isTest
   static void testGetPickListValueNegativeTest() {
     Test.startTest();
@@ -146,10 +131,6 @@ public with sharing class UtilPickListsTest {
     Test.stopTest();
   }
 
-  /**
-   * @description Tests for case-insensitive matching of picklist values to ensure functionality works without case sensitivity.
-   * It checks if the correct picklist value is returned when the search string case does not match the picklist value case.
-   */
   @isTest
   static void testCaseInsensitivePickListMatch() {
     Test.startTest();
@@ -174,10 +155,6 @@ public with sharing class UtilPickListsTest {
     Test.stopTest();
   }
 
-  /**
-   * @description Tests for closest matching of picklist values to ensure the best match is returned
-   * when an exact match is not found.
-   */
   @isTest
   static void testClosestPickListMatch() {
     Test.startTest();
@@ -202,10 +179,6 @@ public with sharing class UtilPickListsTest {
     Test.stopTest();
   }
 
-  /**
-   * @description Tests for inactive picklist values to ensure only active picklist values are returned
-   * and matched against.
-   */
   @isTest
   static void testInactivePickListValues() {
     Test.startTest();

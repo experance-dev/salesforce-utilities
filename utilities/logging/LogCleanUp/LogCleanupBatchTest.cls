@@ -1,13 +1,14 @@
 /**
  * @description Test class for LogCleanupBatch.
  * Validates that old logs are deleted as expected.
- * @group Log Management Tests
- * @see LogCleanupBatch, DMLManager, Logger, Utilities, TestFactory
+ * @group LogCleanup
+ * @see LogCleanupBatch
+ * @author David Wood
  * @since November 2024
- * @last November 2024 - Fixed syntax errors and ensured proper variable scope.
+ * @last May 2026 — Wave 6 conformance
  */
 @IsTest
-public class LogCleanupBatchTest {
+public without sharing class LogCleanupBatchTest {
   @TestVisible
   static final Integer EXPECTED_REMAINING_BLOCK_TRIGGER_LOGS = 5; // half of the logs should be deleted
   @TestVisible
@@ -119,7 +120,7 @@ public class LogCleanupBatchTest {
         SELECT COUNT()
         FROM Block_Trigger_Log__c
       ];
-      System.assertEquals(
+      Assert.areEqual(
         EXPECTED_REMAINING_BLOCK_TRIGGER_LOGS,
         remainingBlockTriggerLogCount,
         'Expected the correct number of Block Trigger Logs to remain.'
@@ -129,7 +130,7 @@ public class LogCleanupBatchTest {
         SELECT COUNT()
         FROM ATM_Endpoint_Log__c
       ];
-      System.assertEquals(
+      Assert.areEqual(
         EXPECTED_REMAINING_ATM_ENDPOINT_LOGS,
         remainingAtmEndpointLogCount,
         'Expected the correct number of ATM Endpoint Logs to remain.'
@@ -163,7 +164,7 @@ public class LogCleanupBatchTest {
         SELECT COUNT()
         FROM Block_Trigger_Log__c
       ];
-      System.assertEquals(
+      Assert.areEqual(
         10,
         remainingBlockTriggerLogCount,
         'Expected the correct number of Block Trigger Logs to remain after exception.'
@@ -173,7 +174,7 @@ public class LogCleanupBatchTest {
         SELECT COUNT()
         FROM ATM_Endpoint_Log__c
       ];
-      System.assertEquals(
+      Assert.areEqual(
         15,
         remainingAtmEndpointLogCount,
         'Expected the correct number of ATM Endpoint Logs to remain after exception.'
@@ -191,7 +192,7 @@ public class LogCleanupBatchTest {
     System.runAs(TestFactory.getTestUser('System Administrator')) {
       // Instantiate LogCleanupBatch using the default constructor
       LogCleanupBatch batchInstance = new LogCleanupBatch();
-      System.assertNotEquals(
+      Assert.areNotEqual(
         null,
         batchInstance,
         'Batch instance should be instantiated using the default constructor.'

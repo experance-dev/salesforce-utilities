@@ -23,19 +23,18 @@
  *  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **/
 
-@isTest
 /**
- * @description This is a test class for the DMLManager class.
- * It is used to test the functionality of the DMLManager class.
+ * @description Tests for the DMLManager class, covering system-mode and user-mode DML operations,
+ * CRUD enforcement, FLS enforcement, merge behaviour, and DML implementation injection.
  *
+ * @group   DML
+ * @see     DMLManager
  * @author  PatronManager LLC, David Wood
  * @since   May 2024
- *
- * @group   Utilities
- * @group   DMLManager
- * @see     DMLManager
+ * @last    May 2026 — Wave 6 conformance
  */
-private class DMLManagerTest {
+@isTest
+private without sharing class DMLManagerTest {
   private static final String APPLE_ACCOUNT = 'Apple Account';
 
   @TestSetup
@@ -333,7 +332,7 @@ private class DMLManagerTest {
       FROM Opportunity
       ORDER BY Id
     ];
-    Assert.areEqual(reload.size(), 2, 'There should be two Opportunities');
+    Assert.areEqual(2, reload.size(), 'There should be two Opportunities');
     Assert.areEqual(
       'Updated1 Opp',
       reload[0].Name,

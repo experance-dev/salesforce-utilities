@@ -1,10 +1,9 @@
 /**
- * @description This class is used for creating a Test Rig for various scenarios.
- * It creates a complete set of SObjects
- *
- * @author      David Wood
- * @since       June 2018
- *
+ * @description Test rig for building complete SObject graphs used across test suites.
+ * @group Testing
+ * @author David Wood
+ * @since June 2018
+ * @last May 2026 — Wave 4 conformance: @isTest, without sharing, Database.SYSTEM_MODE DML, header cleanup.
  */
 @isTest
 public without sharing class TestFactoryRig {
@@ -23,9 +22,6 @@ public without sharing class TestFactoryRig {
   public static String modelNumber;
 
   /**
-   * @description Creates a test rig for generating multiple opportunities.
-   * Uses the default User Permission Set assigned in TestFactoryDefaults
-   *
    * @param numberOfOpportunities The number of opportunities to create in the test rig.
    */
   public static void createOpportunityRig(Integer numberOfOpportunities) {
@@ -36,9 +32,7 @@ public without sharing class TestFactoryRig {
   }
 
   /**
-   * @description Creates an Opportunity Line Item Rig.
-   * Note: Because of Opportunity Sharing Rules, you should always use the same profile in your test if you
-   * want them to work in a with sharing basis
+   * Note: Because of Opportunity Sharing Rules, use the same profile in tests to support with-sharing contexts.
    * @param numberOfOpportunities The number of Opportunities to create.
    * @param permissionSetName The name of the permission set to assign to the user.
    */
@@ -125,23 +119,19 @@ public without sharing class TestFactoryRig {
         )
       );
 
-      insert products;
+      Database.insert(products, AccessLevel.SYSTEM_MODE);
     }
   }
 
   /**
-   * @description Creates a Quote Line Item Rig.
-   * Note: Because of Opportunity Sharing Rules, you should always use the same profile in your test if you
-   * want them to work in a with sharing basis
+   * Note: Because of Opportunity Sharing Rules, use the same profile in tests to support with-sharing contexts.
    */
   public static void createQuoteLineItemRig() {
     createQuoteLineItemRig(TestFactoryDefaults.TEST_USER_PERMISSION);
   }
 
   /**
-   * @description Creates a Quote Line Item Rig.
-   * Note: Because of Opportunity Sharing Rules, you should always use the same profile in your test if you
-   * want them to work in a with sharing basis
+   * Note: Because of Opportunity Sharing Rules, use the same profile in tests to support with-sharing contexts.
    * @param permissionSetName The name of the permission set to assign to the user.
    */
   public static void createQuoteLineItemRig(String permissionSetName) {
@@ -158,39 +148,35 @@ public without sharing class TestFactoryRig {
     }
   }
 
-  /**
-   * @description Creates a quote program rig.
-   */
   public static void createQuoteProgramRig() {
     User user = TestFactory.createTestUser();
 
     System.runAs(user) {
       List<QuoteLineItem> quoteLineItems = createQuoteLineItems();
       List<Quote> quotes = assignQuoteNames(quoteLineItems);
-      update quotes;
+      Database.update(quotes, AccessLevel.SYSTEM_MODE);
 
       List<Product2> products = updateProductYear(quoteLineItems);
-      update products;
+      Database.update(products, AccessLevel.SYSTEM_MODE);
 
       quoteLineItems[1].PricebookEntryId = quoteLineItems[0].PricebookEntryId;
       // System.debug('Quote Line Items: ' + JSON.serializePretty(quoteLineItems));
-      insert quoteLineItems;
+      Database.insert(quoteLineItems, AccessLevel.SYSTEM_MODE);
 
       List<Program_Rate__c> programRates = createProgramRates();
-      insert programRates;
+      Database.insert(programRates, AccessLevel.SYSTEM_MODE);
 
       List<Quote_Program__c> quotePrograms = createQuotePrograms(
         quoteLineItems,
         programRates
       );
-      insert quotePrograms;
+      Database.insert(quotePrograms, AccessLevel.SYSTEM_MODE);
 
-      update quoteLineItems;
+      Database.update(quoteLineItems, AccessLevel.SYSTEM_MODE);
     }
   }
 
   /**
-   * @description Creates QuoteLineItem records for the quote program rig.
    * @return List of created QuoteLineItem records.
    */
   private static List<QuoteLineItem> createQuoteLineItems() {
@@ -209,7 +195,6 @@ public without sharing class TestFactoryRig {
   }
 
   /**
-   * @description Assigns names to the quotes based on predefined constants.
    * @param quoteLineItems List of QuoteLineItem records.
    * @return List of updated Quote records with names assigned.
    */
@@ -230,7 +215,6 @@ public without sharing class TestFactoryRig {
   }
 
   /**
-   * @description Updates the product year for the QuoteLineItem records.
    * @param quoteLineItems List of QuoteLineItem records.
    * @return List of updated Product2 records with new manufacture years.
    */
@@ -261,7 +245,6 @@ public without sharing class TestFactoryRig {
   }
 
   /**
-   * @description Creates program rates for the quote program rig.
    * @return List of created Program_Rate__c records.
    */
   private static List<Program_Rate__c> createProgramRates() {
@@ -386,7 +369,6 @@ public without sharing class TestFactoryRig {
   }
 
   /**
-   * @description Creates quote programs for the quote program rig.
    * @param quoteLineItems List of QuoteLineItem records.
    * @param programRates List of Program_Rate__c records.
    * @return List of created Quote_Program__c records.
@@ -524,7 +506,6 @@ public without sharing class TestFactoryRig {
   }
 
   /**
-   * @description Helper method to create a Quote_Program__c record.
    * @param amount Amount for the quote program.
    * @param description Program description.
    * @param quoteId Related Quote ID.
@@ -564,9 +545,7 @@ public without sharing class TestFactoryRig {
   }
 
   /**
-   * @description Gets a Map of the Objects created by the Test Factory Rig.
-   * Add fields as you may need
-   * @return Map of the Map<String, Map<Id, SObject>>, where String is the SObjectName, Id is the Id of Sobject
+   * @return Map<String, Map<Id, SObject>> keyed by SObject API name; add SOQL fields here as needed.
    */
   public static Map<String, Map<Id, SObject>> getSObjects() {
     Map<String, Map<Id, SObject>> sObjectMap = new Map<String, Map<Id, SObject>>();
@@ -771,9 +750,8 @@ public without sharing class TestFactoryRig {
   }
 
   /**
-   * @description Gets the Opportunity Cluster related to the first Opportunity in the Test Factory Rig.
-   * This is an overloaded method that gets the first Opportunity in the rig.
-   * @return Map<String,List<SObject>> A map of Sobjects with a key of their API name
+   * Convenience overload — returns the cluster for the first Opportunity in the rig.
+   * @return Map<String,List<SObject>> keyed by SObject API name.
    */
   public static Map<String, List<SObject>> getOpportunityCluster() {
     Map<String, Map<Id, SObject>> currentMap = getSObjects();
@@ -782,10 +760,9 @@ public without sharing class TestFactoryRig {
   }
 
   /**
-   * @description Gets the Opportunity Cluster related to a specified Opportunity.
-   * @param oppId Id of the Opportunity to get the Cluster for.
-   * @param currentMap Map<String, Map<Id, SObject>> of the SObjects created by the Test Factory Rig.
-   * @return Map<String,List<SObject>> A map of Sobjects with a key of their API name
+   * @param oppId Id of the Opportunity to retrieve the cluster for.
+   * @param currentMap SObject graph from getSObjects().
+   * @return Map<String,List<SObject>> keyed by SObject API name.
    */
   public static Map<String, List<SObject>> getOpportunityCluster(
     Id oppId,
@@ -849,9 +826,7 @@ public without sharing class TestFactoryRig {
     return returnSObjectMap;
   }
 
-  /**
-   * @description This method is used to debug the test rig.
-   */
+  // System.debug intentional — this is a test-rig diagnostic utility, not a production path.
   public static void debugTestRig() {
     Map<String, Map<Id, SObject>> testRig = getSObjects();
 

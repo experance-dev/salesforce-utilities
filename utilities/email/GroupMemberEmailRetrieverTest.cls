@@ -1,22 +1,17 @@
 /**
- * @description This is a test class for the GroupMemberEmailRetriever class.
- *              It contains test methods to validate the functionality of the GroupMemberEmailRetriever class.
- * @class GroupMemberEmailRetrieverTest
- * @author David Wood
- * @date March 2024
+ * @description Test class for GroupMemberEmailRetriever.
+ * @group Email
  * @see GroupMemberEmailRetriever
- * @requires TestFactory
+ * @author David Wood
+ * @since March 2024
+ * @last May 2026 — Wave 6 conformance
  */
 @isTest
-public with sharing class GroupMemberEmailRetrieverTest {
+public without sharing class GroupMemberEmailRetrieverTest {
   static final String TEST_GROUP_NAME = 'group0';
   static final String TEST_EMAIL = 'other@maininator.com';
   static final String TEST_JUNK = 'junk';
 
-  /**
-   * @description Creates test data for the test class.
-   * This method creates test users, groups, and group members.
-   */
   @TestSetup
   static void makeData() {
     Integer numberUsers = 5;
@@ -96,10 +91,6 @@ public with sharing class GroupMemberEmailRetrieverTest {
     insert groupMembers;
   }
 
-  /**
-   * @description This method tests the processMixedInputs method of the GroupMemberEmailRetriever class.
-   * It verifies that the method correctly retrieves emails from a mixed list of email addresses, group names, and junk values.
-   */
   @isTest
   static void testRetrieveEmails() {
     List<String> toAddresses = new List<String>{
@@ -123,11 +114,6 @@ public with sharing class GroupMemberEmailRetrieverTest {
     );
   }
 
-  /**
-
-     * @description This method tests the processMixedInputs method of the GroupMemberEmailRetriever class.
-     * It verifies that the method handles null and empty sets correctly and returns an empty set of emails.
-     */
   @isTest
   static void testRetrieveEmailsNull() {
     List<String> toAddresses = new List<String>();

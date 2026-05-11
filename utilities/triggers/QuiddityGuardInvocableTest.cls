@@ -1,15 +1,14 @@
 /**
- * @description Test class for QuiddityGuardInvocable.
- * @group Quiddity Recipes
+ * @description Unit tests for QuiddityGuardInvocable. Verifies the invocable
+ *              API-quiddity check returns a valid single-element boolean list.
+ * @group Triggers
  * @see QuiddityGuardInvocable
  * @author David Wood
  * @since June 2024
+ * @last May 2026 — Wave 6 conformance
  */
 @IsTest
-private class QuiddityGuardInvocableTest {
-  /**
-   * @description Test method for invocableIsApiQuiddity.
-   */
+private without sharing class QuiddityGuardInvocableTest {
   @IsTest
   static void testInvocableIsApiQuiddity() {
     // Create a standard user
@@ -23,13 +22,13 @@ private class QuiddityGuardInvocableTest {
       Test.stopTest();
 
       // Assert that the result is not null and contains a boolean value
-      System.assertNotEquals(null, result, 'Result should not be null');
-      System.assertEquals(
+      Assert.isNotNull(result, 'Result should not be null');
+      Assert.areEqual(
         1,
         result.size(),
         'Result list should contain one element'
       );
-      System.assert(
+      Assert.isTrue(
         result[0] == true || result[0] == false,
         'Result should be a boolean value'
       );

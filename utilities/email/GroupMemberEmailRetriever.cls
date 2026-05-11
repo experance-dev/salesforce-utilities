@@ -1,73 +1,67 @@
 /**
- * @description This class is responsible for retrieving the email addresses of group members.
- * It provides methods to query the group members and retrieve their email addresses.
+ * @description Resolves a mixed list of plain email addresses and Public Group developer names
+ *              into a flat set of member email addresses, following nested groups up to
+ *              MAX_RECURSION_DEPTH levels deep.
  *
- * This class processes a mixed list of email addresses and group developer names,
- * retrieves group IDs based on developer names, and fetches email addresses of group members,
- * including handling nested groups up to a defined recursion depth.
+ *              Sharing: declared `without sharing` intentionally. Group membership resolution
+ *              must succeed regardless of the calling user's record-level visibility — a sender
+ *              should not be blocked from addressing a Public Group simply because they do not
+ *              own (or cannot see) all of the group's member records. All SOQL is annotated
+ *              WITH SYSTEM_MODE to make the elevated access explicit at the query site.
  *
- * @group Email Retrieval
+ * @group Email
+ * @author David Wood
  * @since July 2024
- * @see TestFactory
+ * @last May 2026 — Wave 5 conformance
  */
 public without sharing class GroupMemberEmailRetriever {
-  // Sets the maximum recursion depth to 5 to prevent excessive recursion.
+  // Maximum nesting depth for recursive group traversal.
   private static final Integer MAX_RECURSION_DEPTH = 5;
 
-  // Keeps track of processed group IDs to avoid reprocessing.
   private static Set<Id> processedGroupIds = new Set<Id>();
-
-  // Collects user IDs to fetch their email addresses later.
   private static Set<Id> userIds = new Set<Id>();
 
+  /** Custom exception for this class. */
+  public class GroupMemberEmailRetrieverException extends UtilitiesModuleException {}
+
   /**
-   * @description Processes a mixed list of input strings, identifying email addresses and group names for email retrieval.
-   *
-   * @param inputs List of strings that may contain email addresses or group developer names.
-   * @return Set<String> A set of unique email addresses collected.
+   * @param inputs List of strings containing email addresses or group developer names.
+   * @return Set<String> Unique email addresses collected from direct entries and group members.
    */
   public static Set<String> processMixedInputs(List<String> inputs) {
     Set<String> emails = new Set<String>();
 
-    // Early exit for null or empty input.
     if (inputs == null || inputs.isEmpty()) {
       return emails;
     }
 
-    // Reset static variables for a fresh execution.
     processedGroupIds.clear();
     userIds.clear();
 
-    // Separate group names and direct email addresses.
     Set<String> groupNames = new Set<String>();
     for (String input : inputs) {
       if (input.contains('@')) {
-        emails.add(input); // Assumed to be an email address.
+        emails.add(input);
       } else {
-        groupNames.add(input); // Assumed to be a group name.
+        groupNames.add(input);
       }
     }
 
-    // Process each group name if any.
     if (!groupNames.isEmpty()) {
       Set<Id> groupIds = getGroupIdsByDeveloperNames(groupNames);
       retrieveEmailsFromGroups(groupIds, 0);
     }
 
-    // Fetch the email addresses from the collected user IDs.
     if (!userIds.isEmpty()) {
-      Set<String> userEmails = getUserEmailsByIds(userIds);
-      emails.addAll(userEmails);
+      emails.addAll(getUserEmailsByIds(userIds));
     }
 
     return emails;
   }
 
   /**
-   * @description Retrieves the IDs of the Groups based on their Developer Names.
-   *
-   * @param groupNames A set of Developer Names of the Groups.
-   * @return Set<Id> A set of IDs of the Groups that match the provided Developer Names.
+   * @param groupNames Developer names of the Groups to look up.
+   * @return Set<Id> IDs of the matching Groups.
    */
   private static Set<Id> getGroupIdsByDeveloperNames(Set<String> groupNames) {
     Set<Id> groupIds = new Set<Id>();
@@ -75,7 +69,7 @@ public without sharing class GroupMemberEmailRetriever {
       SELECT Id
       FROM Group
       WHERE DeveloperName IN :groupNames
-      WITH SECURITY_ENFORCED
+      WITH SYSTEM_MODE
     ]) {
       groupIds.add(nextGroup.Id);
     }
@@ -83,63 +77,55 @@ public without sharing class GroupMemberEmailRetriever {
   }
 
   /**
-   * @description Retrieves the Emails of the Users based on their IDs.
-   *
-   * @param userIds A set of IDs of the Users.
-   * @return Set<String> A set of Emails of the Users that match the provided IDs.
+   * @param userIds IDs of the Users whose emails are needed.
+   * @return Set<String> Email addresses for the provided User IDs.
    */
   private static Set<String> getUserEmailsByIds(Set<Id> userIds) {
     Set<String> userEmails = new Set<String>();
-    for (User user : [
+    for (User u : [
       SELECT Id, Email
       FROM User
       WHERE Id IN :userIds
-      WITH SECURITY_ENFORCED
+      WITH SYSTEM_MODE
     ]) {
-      userEmails.add(user.Email);
+      userEmails.add(u.Email);
     }
     return userEmails;
   }
 
   /**
-   * @description Recursively retrieves email addresses from a set of groups identified by their developer names.
-   *
-   * @param groupIds The set of group IDs to process.
-   * @param currentDepth The current recursion depth.
+   * @param groupIds Group IDs to process at this recursion level.
+   * @param currentDepth Current recursion depth.
    */
   private static void retrieveEmailsFromGroups(
     Set<Id> groupIds,
     Integer currentDepth
   ) {
-    // Prevent excessive recursion by checking against the maximum depth.
     if (currentDepth > MAX_RECURSION_DEPTH) {
       return;
     }
 
-    // Mark these groups as processed to avoid reprocessing.
     processedGroupIds.addAll(groupIds);
 
-    Set<Id> newGroupIds = new Set<Id>();
+    Set<Id> nestedGroupIds = new Set<Id>();
     for (GroupMember gm : [
       SELECT UserOrGroupId
       FROM GroupMember
       WHERE GroupId IN :groupIds
-      WITH SECURITY_ENFORCED
+      WITH SYSTEM_MODE
     ]) {
-      // Check if the member is a User or another Group.
       if (gm.UserOrGroupId.getSObjectType() == User.sObjectType) {
         userIds.add(gm.UserOrGroupId);
       } else if (
         gm.UserOrGroupId.getSObjectType() == Group.sObjectType &&
         !processedGroupIds.contains(gm.UserOrGroupId)
       ) {
-        newGroupIds.add(gm.UserOrGroupId);
+        nestedGroupIds.add(gm.UserOrGroupId);
       }
     }
 
-    // Recurse for nested groups, if any.
-    if (!newGroupIds.isEmpty()) {
-      retrieveEmailsFromGroups(newGroupIds, currentDepth + 1);
+    if (!nestedGroupIds.isEmpty()) {
+      retrieveEmailsFromGroups(nestedGroupIds, currentDepth + 1);
     }
   }
 }

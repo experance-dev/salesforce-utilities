@@ -1,53 +1,42 @@
 /**
- * @description Implements an easy and re-usable StubProvider
- * Utilizes a fluent interface for ease of use.
- * This is merly an example of how you could build a reusable stub provider
- * class. There are definitely edge cases or features not handled by this class.
+ * @description Reusable StubProvider implementation with a fluent builder API.
+ *              Wraps `System.StubProvider` so tests can stub collaborator methods
+ *              without hand-rolling mocks.  See `TestDouble.Method` for the per-method
+ *              builder and `TestDouble.TestDoubleException` for controlled throws.
  *
- * The general mechanism for use looks like this:
- * ```apex
- *  TestDouble stub = new TestDouble(SomeClass.class);
- *  TestDouble.Method methodToTrack = new TestDouble.Method('methodName')
- *      .returning(someObject);
- *
- *  stub.track(methodToTrack);
- *
- *  ConsumingClass consumer = new ConsumingClass(
- *     (someClass) stub.generate()
- *  );
- * ```
+ *              Typical use:
+ *              ```apex
+ *              TestDouble stub = new TestDouble(SomeClass.class);
+ *              TestDouble.Method m = new TestDouble.Method('methodName')
+ *                  .returning(someObject);
+ *              stub.track(m);
+ *              SomeClass fake = (SomeClass) stub.generate();
+ *              ```
+ * @group Testing
+ * @author David Wood
+ * @since June 2024
+ * @last May 2026 — Wave 2 conformance
  */
 @isTest
-public class TestDouble implements System.StubProvider {
-  /**
-   * @description Property holds a list of objects specifying method calls that
-   * the developer has actively specified a TestDouble or stub for.
-   */
+public without sharing class TestDouble implements System.StubProvider {
+  // Methods the developer has actively registered stubs for.
   List<Method> methods = new List<Method>();
 
-  /**
-   * @description This is a required property! it specifies the Apex Type
-   * that is being actively stubbed. Note, you cannot stub
-   * system provided classes, sObjects and static methods.
-   * see: https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_testing_stub_api.htm
-   * for details on the limitations of the StubProvider interface
-   */
+  // The Apex Type being stubbed — required by Test.createStub().
+  // Note: system classes, sObjects, and static methods cannot be stubbed.
   Type objectType;
 
   /**
-   * @description      Constructor requiring the Type parameter to
-   * ensure we always set the Type property.
-   * @param objectType Type name. ie: TestDouble.class
+   * @param objectType The Apex Type to stub (e.g. MyService.class).
    */
   public TestDouble(Type objectType) {
     this.objectType = objectType;
   }
 
   /**
-   * @description   This adds a given method object to the list of Methods
-   * that are actively overridden and stubbed by this TestDouble instance.
-   * @param toTrack A TestDouble.Method object
-   * @return        `TestDouble`
+   * @description Registers a Method stub with this instance for dispatch.
+   * @param toTrack A configured `TestDouble.Method` object.
+   * @return `TestDouble` — this instance, for chaining.
    */
   public TestDouble track(Method toTrack) {
     this.methods.add(toTrack);
@@ -56,28 +45,25 @@ public class TestDouble implements System.StubProvider {
   }
 
   /**
-   * @description Generates the actual stub object for use in tests.
-   * @return      `Object` This object has to be casted back to the
-   * class being stubbed at the point of calling. See StubbingRecipes_Tests
-   * for an example of when, and how to cast this.
+   * @description Materialises the stub object via the platform stub API.
+   * @return `Object` — cast back to the stubbed type at the call site.
    */
   public Object generate() {
     return Test.createStub(this.objectType, this);
   }
 
   /**
-   * @description             Required method for the StubProvider interface
-   * This extensive parameter list is used to help disambiguate overloaded
-   * method names where needed. This method is used to delegate response to
-   * appropriate Method object - matched by name and params.
-   * @param stubbedObject      - This is the object being stubbed
-   * @param stubbedMethodName  - This is the name of the Method being stubbed
-   * @param returnType         - Return type
-   * @param listOfParamTypes   - List of parameter types
-   * @param listOfParamNames   - List of parameter names
-   * @param listOfArgs         - List of parameter values
-   * @return                  `Object` Object to be returned by the Method
-   * object this method delegates to.
+   * @description Required `StubProvider` callback.  Matches the incoming call
+   *              to a registered `Method` by name, then by param-list when the
+   *              method is overloaded, and delegates to `Method.handleCall()`.
+   * @param stubbedObject     The object being stubbed.
+   * @param stubbedMethodName The name of the method being called.
+   * @param returnType        The declared return type.
+   * @param listOfParamTypes  Parameter types (used for overload disambiguation).
+   * @param listOfParamNames  Parameter names (used for overload disambiguation).
+   * @param listOfArgs        Actual argument values.
+   * @return `Object` — the value registered via `Method.returning()`, or null
+   *         if no matching stub was found (intentional: unregistered calls break tests).
    */
   @SuppressWarnings('PMD.ExcessiveParameterList')
   public Object handleMethodCall(
@@ -89,16 +75,10 @@ public class TestDouble implements System.StubProvider {
     List<Object> listOfArgs
   ) {
     for (Method method : methods) {
-      /**
-       * I'm not normally a fan of such complex if statements, but doing
-       * it this way allows us to disambiguate overloaded methods.
-       */
+      // Case-insensitive name match first; skip to param disambiguation when needed.
       if (method.name.toLowerCase() == stubbedMethodName.toLowerCase()) {
-        // Since it's not possible to actually call a method with
-        // real parameters that would result in a size difference
-        // between the three list paramters - listOfParamTypes,
-        // listOfParamNames, and listOfArgs - we'll only check for a
-        // non zero list size on the first one.
+        // Param lists are always equal in size (the platform guarantees it), so
+        // checking only listOfParamTypes.size() is sufficient for the guard.
         if (
           method.listOfParamTypes.size() > 0 &&
           (method.listOfParamTypes != listOfParamTypes ||
@@ -111,55 +91,43 @@ public class TestDouble implements System.StubProvider {
         }
       }
     }
-    // Return null - which will break unit tests if no matching method has
-    // been found. Ie: your unit tests will break, if you don't properly
-    // stubb the methods you're calling. This is on purpose!
+    // Returning null is deliberate: unregistered calls will cause downstream
+    // NPEs in tests, immediately revealing missing stub registrations.
     return null;
   }
 
   /**
-   * @description This inner class describes a Method that is to be stubbed.
-   * Multiple Method objects will likely be created in the course of your unit
-   * tests, and these Method objects are added to the `methods` property of
-   * your TestDouble instance.
+   * @description Describes a single stubbed method, including its return value,
+   *              optional param-list constraints for overload disambiguation,
+   *              and call-count tracking.
    */
   public class Method {
-    // Name of the method being stubbed
+    // Name of the method being stubbed.
     String name;
-    // Object that will be returned by this stub
+    // Value to return when the stub is invoked.
     Object returnValue;
-    // A running count of the times this particular method has been called
-    // useful for asserting a method has been called X times.
+    // Running tally — assert against this to verify call count.
     public Integer hasBeenCalledXTimes = 0;
-    // Specifies that this method stub should return an Exception. Note
-    // if you set this to true, it will always be an instance of
-    // TestDoubleException
+    // When true, handleCall() throws TestDoubleException instead of returning.
     Boolean throwsException = false;
-    // The exception string you want returned.
+    // Message carried by the thrown TestDoubleException.
     String exceptionMessage = '';
-    // List of types of the parameters this method must receive in order to
-    // return the stub instance's returnValue. Used for disambiguation.
+    // Overload-disambiguation: all three lists must match for the stub to fire.
     List<Type> listOfParamTypes = new List<Type>();
-    // List of parameter names that this method must receive in order to
-    // return the stub instance's returnValue. Used for disambiguation.
     List<String> listOfParamNames = new List<String>();
-    // List of parameter values that this method must receive in order to
-    // return the stub instance's returnValue. Used for disambiguation.
     List<Object> listOfArgs = new List<Object>();
 
     /**
-     * @description      Minimalist constructor for this class.
-     * @param methodName the name of the method to be stubbed.
+     * @param methodName Name of the method to stub.
      */
     public Method(String methodName) {
       this.name = methodName;
     }
 
     /**
-     * @description      Adds a matching ParamTypes list to this method
-     * definition. If added,
-     * @param paramTypes
-     * @return           `Method`
+     * @description Constrains this stub to fire only when param types match.
+     * @param paramTypes Expected parameter types.
+     * @return `Method` — this instance, for chaining.
      */
     public Method withParamTypes(List<Type> paramTypes) {
       this.listOfParamTypes = paramTypes;
@@ -168,10 +136,9 @@ public class TestDouble implements System.StubProvider {
     }
 
     /**
-     * @description  Sets the parameter names for the method.
-     *
-     * @param paramNames A list of parameter names.
-     * @return The updated Method object.
+     * @description Constrains this stub to fire only when param names match.
+     * @param paramNames Expected parameter names.
+     * @return `Method` — this instance, for chaining.
      */
     public Method withParamNames(List<String> paramNames) {
       this.listOfParamNames = paramNames;
@@ -180,10 +147,9 @@ public class TestDouble implements System.StubProvider {
     }
 
     /**
-     * @description Sets the arguments for the method.
-     *
-     * @param args The list of arguments to be set.
-     * @return The updated instance of the Method class.
+     * @description Constrains this stub to fire only when argument values match.
+     * @param args Expected argument values.
+     * @return `Method` — this instance, for chaining.
      */
     public Method withArgs(List<Object> args) {
       this.listOfArgs = args;
@@ -192,10 +158,9 @@ public class TestDouble implements System.StubProvider {
     }
 
     /**
-     * @description Sets the return value for the method being tested.
-     *
-     * @param returnValue The value to be returned by the method.
-     * @return The TestDouble instance for method chaining.
+     * @description Registers the value this stub returns when invoked.
+     * @param returnValue The value to return.
+     * @return `Method` — this instance, for chaining.
      */
     public Method returning(Object returnValue) {
       this.returnValue = returnValue;
@@ -204,10 +169,9 @@ public class TestDouble implements System.StubProvider {
     }
 
     /**
-     * @description Throws an exception with the specified message.
-     *
-     * @param exceptionMessage The message to include in the exception.
-     * @return The current instance of the Method class.
+     * @description Configures this stub to throw a `TestDoubleException` instead of returning.
+     * @param exceptionMessage Message to include in the thrown exception.
+     * @return `Method` — this instance, for chaining.
      */
     public Method throwing(String exceptionMessage) {
       this.exceptionMessage = exceptionMessage;
@@ -216,9 +180,9 @@ public class TestDouble implements System.StubProvider {
     }
 
     /**
-     * @description Handles the call and returns an Object.
-     *
-     * @return The Object returned by the call.
+     * @description Dispatches the stub — increments the call counter, then either
+     *              throws or returns per configuration.
+     * @return `Object` — the registered return value, or throws.
      */
     public Object handleCall() {
       hasBeenCalledXTimes++;
@@ -231,8 +195,10 @@ public class TestDouble implements System.StubProvider {
   }
 
   /**
-   * @description Internal exception class.
+   * @description Thrown by stubs configured via `Method.throwing()`.
+   *              Extends `UtilitiesModuleException` so test helpers share the
+   *              module-level catch hierarchy.
    */
-  public class TestDoubleException extends Exception {
+  public class TestDoubleException extends UtilitiesModuleException {
   }
 }

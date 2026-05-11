@@ -1,27 +1,18 @@
-@isTest
 /**
- * @description The HttpCalloutMockFactory class is used to create instances of HttpCalloutMock.
- * It implements the HttpCalloutMock interface.
- *
- *
+ * @description Creates and queues HttpResponse instances for use with Test.setMock.
+ *              Supports single-response and ordered multi-response scenarios.
+ *              Wave 6 test authors should standardize on this factory instead of
+ *              inlining anonymous HttpCalloutMock implementations per test.
+ * @group Testing
  * @author David Wood
- * @date 2024-03-16
- * @version 1.0
- *
- * @see CATLeadAudit
- *
+ * @since March 2024
+ * @last May 2026 — Wave 2 conformance
  */
-public class HttpCalloutMockFactory implements HttpCalloutMock {
-  // Holds a list of HTTP Response objects to return.
+@isTest
+public without sharing class HttpCalloutMockFactory implements HttpCalloutMock {
+  // Holds an ordered list of HttpResponse objects to return one per callout.
   protected List<HttpResponse> responseQueue = new List<HttpResponse>();
 
-  /**
-   * @description This constructor builds a single response that will be returned by the mock
-   * @param code HTTP status code (200, 201, 301, 302, 400, 404, 503, etc)
-   * @param status HTTP text status. ie: "ok" for 200
-   * @param bodyAsString This is the string that will be returned as the body
-   * @param headers a map of headers applied to the response object
-   **/
   @SuppressWarnings('PMD.ExcessiveParameterList')
   public HttpCalloutMockFactory(
     Integer code,
@@ -39,35 +30,29 @@ public class HttpCalloutMockFactory implements HttpCalloutMock {
     );
   }
 
-  /**
-   * @description This constructor accepts a list of HTTP responses to be returned.
-   * @param orderedResponses HTTP status code (200, 201, 301, 302, 400, 404, 503, etc)
-   **/
   public HttpCalloutMockFactory(List<HttpResponse> orderedResponses) {
     this.responseQueue = orderedResponses;
   }
 
   /**
-   * @description `setMock` can only be called once per test so to enable mocking
-   * multiple callouts, this response method removes the first reponse from the queue
-   * and returns that. Additional callouts will respond with the next first items.
-   * @param request injected by the system but we don't use it in this mock.
-   * @return HttpResponse the first mock reponse in the queue.
-   **/
+   * @description Pops and returns the next queued response. Required by HttpCalloutMock.
+   * @param request Injected by the platform; unused in this mock.
+   * @return HttpResponse The next mock response in the queue.
+   */
   public HttpResponse respond(HttpRequest request) {
     if (this.responseQueue.size() > 0) {
       return this.responseQueue.remove(0);
     }
-    throw new HttpCalloutMockException('Mock reponse queue is empty.');
+    throw new HttpCalloutMockException('Mock response queue is empty.');
   }
 
   /**
-   * @description Required method for the `HttpCalloutMock` interface
-   * @param code         Response status code - 200, 301, 404 etc.
-   * @param status       Response status label: 'OK' or 'Server Error'
-   * @param bodyAsString Reponse body
-   * @param headers      Reponse headers
-   * @return the assembled response
+   * @description Assembles a single HttpResponse from its constituent parts.
+   * @param code         Response status code — 200, 301, 404, etc.
+   * @param status       Response status label — 'OK', 'Server Error', etc.
+   * @param bodyAsString Response body as a string.
+   * @param headers      Response headers map.
+   * @return HttpResponse The assembled response object.
    */
   @SuppressWarnings('PMD.ExcessiveParameterList')
   public static HttpResponse generateHttpResponse(
@@ -86,9 +71,5 @@ public class HttpCalloutMockFactory implements HttpCalloutMock {
     return res;
   }
 
-  /**
-   * @description Represents an exception that is thrown when an error occurs during an HTTP callout mock.
-   */
-  public class HttpCalloutMockException extends Exception {
-  }
+  public class HttpCalloutMockException extends UtilitiesModuleException {}
 }

@@ -1,21 +1,18 @@
 /**
- * @description This class provides a context for log cleanup.
- * @group Log Management
- * @see LogCleanupBatch.cls
+ * @description Provides log-retention configuration for the log-cleanup pipeline.
+ *              Reads `Log_Clean_Up__mdt` custom metadata and returns a map of
+ *              SObject API name → retention days; override in tests via
+ *              `MockLogCleanupContext`.
+ * @group LogCleanup
  * @author David Wood
  * @since November 2024
- * @last November 2024 - Created class.
+ * @last May 2026 — conformance refactor: explicit sharing, header, method-level ApexDoc pruned.
  */
-
-public virtual class LogCleanupContext {
+public virtual inherited sharing class LogCleanupContext {
   /**
-   * @description Retrieves log retention days from custom metadata.
-   * @group Log Management
-   * @see LogCleanupContext.cls
-   * @since November 2024
-   * @last November 2024 - Updated method documentation.
+   * @description Retrieves log-retention days from `Log_Clean_Up__mdt` custom metadata.
    *
-   * @return Map of log object names to their respective retention days.
+   * @return Map of SObject API names to their configured retention days.
    */
   public virtual Map<String, Integer> getLogRetentionDays() {
     Map<String, Integer> logRetentionDays = new Map<String, Integer>();

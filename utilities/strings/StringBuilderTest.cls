@@ -1,5 +1,13 @@
+/**
+ * @description Test class for StringBuilder and its inner builder classes.
+ * @group Strings
+ * @see StringBuilder
+ * @author Zelis
+ * @since 2024
+ * @last May 2026 — Wave 6 conformance
+ */
 @isTest
-public class StringBuilderTest {
+public without sharing class StringBuilderTest {
   @isTest
   static void testStringBuilderAddSingleValue() {
     // Test single value addition
@@ -9,7 +17,7 @@ public class StringBuilderTest {
     String result = sb.getStringValue();
 
     // Assert that the concatenated string is as expected
-    System.assertEquals(
+    Assert.areEqual(
       'HelloWorld',
       result,
       'The concatenated string should be "HelloWorld".'
@@ -24,7 +32,7 @@ public class StringBuilderTest {
     String result = sb.getStringValue();
 
     // Assert that the concatenated string is as expected
-    System.assertEquals(
+    Assert.areEqual(
       'Hello World',
       result,
       'The concatenated string should be "Hello World".'
@@ -39,7 +47,7 @@ public class StringBuilderTest {
     String result = csvBuilder.getStringValue();
 
     // Assert that the CSV string is as expected
-    System.assertEquals(
+    Assert.areEqual(
       'Apple,Banana,Cherry',
       result,
       'The CSV string should be "Apple,Banana,Cherry".'
@@ -60,7 +68,7 @@ public class StringBuilderTest {
     String result = fieldListBuilder.getStringValue();
 
     // Assert that the field list is as expected
-    System.assertEquals(
+    Assert.areEqual(
       'Name,Industry,AnnualRevenue',
       result,
       'The field list should be "Name,Industry,AnnualRevenue".'
@@ -82,7 +90,7 @@ public class StringBuilderTest {
     String result = fieldListBuilder.getStringValue();
 
     // Assert that the field list includes the CurrencyIsoCode field
-    System.assertEquals(
+    Assert.areEqual(
       'Name,Industry,CurrencyIsoCode',
       result,
       'The field list should be "Name,Industry,CurrencyIsoCode".'
@@ -134,7 +142,7 @@ public class StringBuilderTest {
       'Test Account 3,Healthcare,3000000';
 
     // Assert that the generated report matches the expected result
-    System.assertEquals(
+    Assert.areEqual(
       expectedReport,
       report,
       'The generated report should match the expected CSV format.'

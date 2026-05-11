@@ -1,38 +1,25 @@
 /**
- * @format            :
- * @description       : Based upon multiple test factories
- * @author            : Salesforce Apex Receipes et al
- * @group             :
- * @last modified on  : 04-03-2024
- * @last modified by  : David Wood  david@experancepartners.com
- * Modifications Log
- * Ver   Date         Author                        Modification
- * 1.0   12-29-2020   david@experancepartners.com   Initial Version
- * 1.1   02*09*2022   david@experancepartners.com   removed freight line item from OLI default and cleaned up debug calls
- * 2.0   08-04-2022   david@experancepartbers.com   Reverting to base from Hoechst
- **/
-
+ * @description Default field-value sets for every SObject type used in tests.
+ *              Inner class names follow the convention [ObjectName]Defaults (strip __c/__).
+ *              TestFactory.createSObject auto-discovers these by convention.
+ * @group Testing
+ * @author David Wood
+ * @since December 2020
+ * @last May 2026 — Wave 2 conformance: sharing modifier, header normalisation, method-level ApexDoc stripped
+ */
 @IsTest
-public class TestFactoryDefaults {
+public without sharing class TestFactoryDefaults {
   public static final String DEFAULT_PRODUCT_FAMILY = 'TestFam';
   public static final String DEFAULT_WARRANTY_PRODUCT = '226';
-
   public static final String TEST_USER_PERMISSION = 'TestMachineRep';
+
   private static Id priceBookId;
 
-  // To specify defaults for objects, use the naming convention [ObjectName]Defaults.
-  // For custom objects, omit the __c from the Object Name
+  // ── Standard object defaults ─────────────────────────────────────────────
 
-  /**
-   * @description This class implements the TestFactory.FieldDefaults interface and provides default values for Account fields.
-   */
   public class AccountDefaults implements TestFactory.FieldDefaults {
     String randomizer = Utilities.generateRandomCounter();
 
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       Id recordTypeId = Utilities.getRecordTypeMap('Account')
         .get('Customer Account')
@@ -42,14 +29,10 @@ public class TestFactoryDefaults {
         Account.RecordTypeId => recordTypeId,
         Account.DBS_Customer_Number__c => generateDBSCustomerNo(),
         Account.BillingStreet => randomizer + ' Test St',
-        Account.BillingCity => 'Test ' +
-        randomizer +
-        ' City',
+        Account.BillingCity => 'Test ' + randomizer + ' City',
         Account.BillingState => 'TN',
         Account.BillingPostalCode => '1' + randomizer,
-        Account.ShippingStreet => 2 +
-        randomizer +
-        ' Shipping St',
+        Account.ShippingStreet => 2 + randomizer + ' Shipping St',
         Account.ShippingCity => 'Shipping City ' + randomizer,
         Account.ShippingState => 'TN',
         Account.ShippingPostalCode => '1' + randomizer
@@ -57,16 +40,29 @@ public class TestFactoryDefaults {
     }
   }
 
-  /**
-   * @description This class implements the TestFactory.FieldDefaults interface and provides default values for User fields.
-   */
+  public class MyAccountDefaults implements TestFactory.FieldDefaults {
+    String randomizer = Utilities.generateRandomCounter();
+
+    public Map<Schema.SObjectField, Object> getFieldDefaults() {
+      return new Map<Schema.SObjectField, Object>{
+        Account.Name => 'My Test Account',
+        Account.DBS_Customer_Number__c => generateDBSCustomerNo(),
+        Account.BillingStreet => randomizer + ' Test St',
+        Account.BillingCity => 'Test ' + randomizer + ' City',
+        Account.BillingState => 'TN',
+        Account.BillingPostalCode => '1' + randomizer,
+        Account.ShippingStreet => 2 + randomizer + ' Shipping St',
+        Account.ShippingCity => 'Shipping City ' + randomizer,
+        Account.ShippingState => 'TN',
+        Account.ShippingPostalCode => '1' + randomizer
+      };
+    }
+  }
+
   public class UserDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       String code = Utilities.generateRandomCounter();
+      // SOQL: profile lookup; acceptable in test context.
       Profile standardUserProfile = [
         SELECT Id
         FROM Profile
@@ -75,60 +71,19 @@ public class TestFactoryDefaults {
       ];
       return new Map<Schema.SObjectField, Object>{
         User.Alias => 'st' + code,
-        User.Email => 'standarduser' +
-        code +
-        '@mailinator.com',
+        User.Email => 'standarduser' + code + '@mailinator.com',
         User.EmailEncodingKey => 'UTF-8',
         User.LastName => 'User',
         User.LanguageLocaleKey => 'en_US',
         User.LocaleSidKey => 'en_US',
         User.ProfileId => standardUserProfile.Id,
         User.TimeZoneSidKey => 'America/New_York',
-        User.UserName => 'standarduser' +
-        code +
-        '@mailinator.com'
+        User.UserName => 'standarduser' + code + '@mailinator.com'
       };
     }
   }
 
-  /**
-   * @description This class provides and expanded Account object used in test classes.
-   */
-  public class MyAccountDefaults implements TestFactory.FieldDefaults {
-    String randomizer = Utilities.generateRandomCounter();
-
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
-    public Map<Schema.SObjectField, Object> getFieldDefaults() {
-      return new Map<Schema.SObjectField, Object>{
-        Account.Name => 'My Test Account',
-        Account.DBS_Customer_Number__c => generateDBSCustomerNo(),
-        Account.BillingStreet => randomizer + ' Test St',
-        Account.BillingCity => 'Test ' +
-        randomizer +
-        ' City',
-        Account.BillingState => 'TN',
-        Account.BillingPostalCode => '1' + randomizer,
-        Account.ShippingStreet => 2 +
-        randomizer +
-        ' Shipping St',
-        Account.ShippingCity => 'Shipping City ' + randomizer,
-        Account.ShippingState => 'TN',
-        Account.ShippingPostalCode => '1' + randomizer
-      };
-    }
-  }
-
-  /**
-   * @description This class provides default field values for the Contact object in test classes.
-   */
   public class ContactDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       return new Map<Schema.SObjectField, Object>{
         Contact.FirstName => 'First',
@@ -138,16 +93,9 @@ public class TestFactoryDefaults {
     }
   }
 
-  /**
-   * @description This class provides default field values for the Contact object with an associated Account in test classes.
-   */
   public class ContactWithAccountDefaults implements TestFactory.FieldDefaults {
     Account account = (Account) TestFactory.createSObject(new Account(), true);
 
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       return new Map<Schema.SObjectField, Object>{
         Contact.FirstName => 'First',
@@ -158,17 +106,9 @@ public class TestFactoryDefaults {
     }
   }
 
-  /**
-   * @description This class provides default field values for the Opportunity object in test classes.
-   */
   public class OpportunityDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       String code = Utilities.generateRandomCounter();
-
       return new Map<Schema.SObjectField, Object>{
         Opportunity.Name => 'Test Opportunity ' + code,
         Opportunity.StageName => 'Quoting',
@@ -177,17 +117,9 @@ public class TestFactoryDefaults {
     }
   }
 
-  /**
-   * @description This class provides default field values for the Opportunity object and creates the associated Account object with default values in test classes.
-   */
   public class OpportunityWithAccountDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       String code = Utilities.generateRandomCounter();
-
       Account account = (Account) TestFactory.createSObject(
         new Account(Name = 'Test Account ' + code),
         true
@@ -201,14 +133,7 @@ public class TestFactoryDefaults {
     }
   }
 
-  /**
-   * @description This class provides default field values for the OpportunityLineItem object in test classes.
-   */
   public class OpportunityLineItemDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       return new Map<Schema.SObjectField, Object>{
         OpportunityLineItem.Is_Machine__c => false,
@@ -217,14 +142,7 @@ public class TestFactoryDefaults {
     }
   }
 
-  /**
-   * @description This class provides default field values for the Campaign object in test classes.
-   */
   public class CampaignDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       return new Map<Schema.SObjectField, Object>{
         Campaign.Campaign_Division__c => UtilPickLists.getPickListValues(
@@ -234,17 +152,28 @@ public class TestFactoryDefaults {
     }
   }
 
-  /**
-   * @description This class provides default field values for the Product2 object in test classes.
-   */
+  public class CaseDefaults implements TestFactory.FieldDefaults {
+    public Map<Schema.SObjectField, Object> getFieldDefaults() {
+      return new Map<Schema.SObjectField, Object>{
+        Case.Subject => 'Test Case'
+      };
+    }
+  }
+
+  public class LeadDefaults implements TestFactory.FieldDefaults {
+    public Map<Schema.SObjectField, Object> getFieldDefaults() {
+      return new Map<Schema.SObjectField, Object>{
+        Lead.LastName => 'Test Lead',
+        Lead.Company => 'Test Company'
+      };
+    }
+  }
+
+  // ── Product defaults ─────────────────────────────────────────────────────
+
   public class Product2Defaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       String code = Utilities.generateRandomCounter();
-
       return new Map<Schema.SObjectField, Object>{
         Product2.productCode => 'Test Product ' + code,
         Product2.Family => DEFAULT_PRODUCT_FAMILY,
@@ -264,23 +193,13 @@ public class TestFactoryDefaults {
     }
   }
 
-  /**
-   * @description This class provides default field values for the Product2 object in test classes.
-   */
   public class Product2UsedMachineDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
-
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       String code = Utilities.generateRandomCounter();
-
       TestFactory.createSObject(
         new Machine__c(Serial_Number_DBS__c = code, Availability__c = true),
         true
       );
-
       return new Map<Schema.SObjectField, Object>{
         Product2.Acquisition_Cost__c => 6000,
         Product2.Availability__c => true,
@@ -302,17 +221,9 @@ public class TestFactoryDefaults {
     }
   }
 
-  /**
-   * @description This class provides default field values for the Product2 object in test classes.
-   */
   public class Product2AttachementDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       String code = Utilities.generateRandomCounter();
-
       return new Map<Schema.SObjectField, Object>{
         Product2.Acquisition_Cost__c => 50,
         Product2.Availability__c => true,
@@ -332,14 +243,7 @@ public class TestFactoryDefaults {
     }
   }
 
-  /**
-   * @description This class provides default field values for the Product2 Warrany for tests
-   */
   public class ProductWarrantiesDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       return new Map<Schema.SObjectField, Object>{
         Product2.Acquisition_Cost__c => 1000,
@@ -356,40 +260,13 @@ public class TestFactoryDefaults {
     }
   }
 
-  /**
-   * @description This class provides default field values for the Case object in test classes.
-   */
-  public class CaseDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
-    public Map<Schema.SObjectField, Object> getFieldDefaults() {
-      return new Map<Schema.SObjectField, Object>{
-        Case.Subject => 'Test Case'
-      };
-    }
-  }
+  // ── Machine defaults ─────────────────────────────────────────────────────
 
-  /**
-   * @description This class provides default field values for the Machine object in test classes.
-   */
   public class MachineDefaults implements TestFactory.FieldDefaults {
-    //get Machine RecordId
-    Id machineRecordTypeId = Utilities.getRecordTypeId(
-      'Machine__c',
-      'Dealer_Inventory'
-    );
-    Account accountOwner = (Account) TestFactory.createSObject(
-      new Account(),
-      true
-    );
+    Id machineRecordTypeId = Utilities.getRecordTypeId('Machine__c', 'Dealer_Inventory');
+    Account accountOwner = (Account) TestFactory.createSObject(new Account(), true);
     String serialNo = Utilities.generateUUID();
 
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       return new Map<Schema.SObjectField, Object>{
         Machine__c.RecordTypeId => machineRecordTypeId,
@@ -401,20 +278,9 @@ public class TestFactoryDefaults {
     }
   }
 
-  /**
-   * @description This class provides default field values for the Machine object in test classes.
-   */
   public class MachineWithoutAccountDefaults implements TestFactory.FieldDefaults {
-    //get Machine RecordId
-    Id machineRecordTypeId = Utilities.getRecordTypeId(
-      'Machine__c',
-      'Customer_Machine'
-    );
+    Id machineRecordTypeId = Utilities.getRecordTypeId('Machine__c', 'Customer_Machine');
 
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       return new Map<Schema.SObjectField, Object>{
         Machine__c.RecordTypeId => machineRecordTypeId
@@ -422,36 +288,14 @@ public class TestFactoryDefaults {
     }
   }
 
-  /**
-   * @description This class provides default field values for the Lead object in test classes.
-   */
-  public class LeadDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
-    public Map<Schema.SObjectField, Object> getFieldDefaults() {
-      return new Map<Schema.SObjectField, Object>{
-        Lead.LastName => 'Test Lead',
-        Lead.Company => 'Test Company'
-      };
-    }
-  }
+  // ── Quote / OLI test-suite defaults ─────────────────────────────────────
 
   /**
-   * @description This class provides default values for a complete Test Suite for the OpportunityLineItem object.
-   * Objects created and linked are Account, Contact, Opportunity, OpportunityLineItem, Product2, and PricebookEntry
-   * Sale price is 100K and cost is 50K
+   * @description Full OLI test suite: Account + Opportunity + Used-Machine Product2 + PricebookEntry.
    */
   public class OpportunityLineItemTestSuiteUsedMachineDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       String code = Utilities.generateRandomCounter();
-
-      //setup the Used Machine
       Product2 product = (Product2) TestFactory.createSObject(
         new Product2(),
         'TestFactoryDefaults.Product2UsedMachineDefaults',
@@ -461,8 +305,6 @@ public class TestFactoryDefaults {
         getPricebookId(),
         product.Id
       );
-
-      //set opportunity and opportunitylineitem
       Opportunity opportunity = (Opportunity) TestFactory.createSObject(
         new Opportunity(
           Name = 'Test Opportunity ' + code,
@@ -471,7 +313,6 @@ public class TestFactoryDefaults {
         TestFactoryDefaults.OpportunityWithAccountDefaults.class.getName(),
         true
       );
-
       return new Map<Schema.SObjectField, Object>{
         OpportunityLineItem.OpportunityId => opportunity.Id,
         OpportunityLineItem.PricebookEntryId => pricebookEntryId,
@@ -482,28 +323,17 @@ public class TestFactoryDefaults {
   }
 
   /**
-   * @description This class provides default values for a complete Test Suite for the OpportunityLineItem object.
-   * Objects created and linked are Account, Contact, Opportunity, OpportunityLineItem, Product2, and PricebookEntry
-   * Sale price is 10K and cost is 50K
+   * @description Full OLI test suite: Account + Opportunity + Attachment Product2 + PricebookEntry.
    */
   public class OpportunityLineItemTestSuiteAttachementDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       String code = Utilities.generateRandomCounter();
-
-      //setup the Used Machine
       Product2 product = (Product2) TestFactory.createSObject(
         new Product2(),
         'TestFactoryDefaults.Product2AttachementDefaults',
         true
       );
-
       Id pbeId = TestFactory.getPricebookEntryId(getPricebookId(), product.Id);
-
-      //set opportunity and opportunitylineitem
       Opportunity opportunity = (Opportunity) TestFactory.createSObject(
         new Opportunity(
           Name = 'Test Opportunity ' + code,
@@ -512,7 +342,6 @@ public class TestFactoryDefaults {
         TestFactoryDefaults.OpportunityWithAccountDefaults.class.getName(),
         true
       );
-
       return new Map<Schema.SObjectField, Object>{
         OpportunityLineItem.OpportunityId => opportunity.Id,
         OpportunityLineItem.PricebookEntryId => pbeId,
@@ -523,29 +352,20 @@ public class TestFactoryDefaults {
   }
 
   /**
-   * @description This class provides default values for a QuoteLineItem object.
-   * Objects created and linked are Opportunity, Product2, PricebookEntry Quote, and QuoteLineItem
-   * Sale price is 6000 and cost is 5000
+   * @description Full QuoteLineItem test suite: Opportunity + Used-Machine Product2 + PricebookEntry + Quote.
    */
   public class QuoteLineItemTestSuiteUsedMachineDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       Quote quote = (Quote) TestFactory.createSObject(new Quote(), true);
-
       Product2 product = (Product2) TestFactory.createSObject(
         new Product2(),
         TestFactoryDefaults.Product2UsedMachineDefaults.class.getName(),
         true
       );
-
       Id pricebookEntryId = TestFactory.getPricebookEntryId(
         getPricebookId(),
         product.Id
       );
-
       return new Map<Schema.SObjectField, Object>{
         QuoteLineItem.QuoteId => quote.Id,
         QuoteLineItem.Product2Id => product.Id,
@@ -558,21 +378,15 @@ public class TestFactoryDefaults {
   }
 
   /**
-   * @description This class, QuoteDefaults, implements the TestFactory.FieldDefaults interface.
-   * It provides default values for fields used in test data generation.
+   * @description Quote defaults: creates an Opportunity with Account, sets pricebook and record type.
    */
   public class QuoteDefaults implements TestFactory.FieldDefaults {
-    /**
-     * @description Implements required method for custom object creation
-     * @return A map of default field values.
-     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       Opportunity opportunity = (Opportunity) TestFactory.createSObject(
         new Opportunity(),
         TestFactoryDefaults.OpportunityWithAccountDefaults.class.getName(),
         true
       );
-
       return new Map<Schema.SObjectField, Object>{
         Quote.Name => 'Test Quote',
         Quote.Pricebook2Id => getPricebookId(),
@@ -585,6 +399,8 @@ public class TestFactoryDefaults {
       };
     }
   }
+
+  // ── Private helpers ──────────────────────────────────────────────────────
 
   private static String generateDBSCustomerNo() {
     return String.valueOf(Utilities.generateUUID()).substring(0, 8);

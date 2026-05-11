@@ -1,22 +1,17 @@
 /**
- * @description Invocable class to check whether the current transaction is REST or SOAP.
+ * @description Flow-invocable wrapper around QuiddityGuard; exposes the API quiddity
+ *              check (REST / SOAP / Bulk API) as an Invocable Action.
  *
- * @group   Quiddity Recipes
+ * @group   Triggers
  * @see     QuiddityGuard
- *
  * @author  David Wood
  * @since   June 2024
+ * @last    May 2026 — Wave 3 conformance
  */
-public with sharing class QuiddityGuardInvocable {
-  /**
-   * @description Invocable method to check if the current Quiddity context is either REST or SOAP.
-   * @return A boolean value indicating if the current quiddity is REST or SOAP.
-   * @label Check Transaction is from APIs
-   */
+public without sharing class QuiddityGuardInvocable {
+  /** @return Single-element list indicating whether the current quiddity is an API context. */
   @InvocableMethod(label='Check Transaction is from APIs')
   public static List<Boolean> invocableIsApiQuiddity() {
-    List<Boolean> results = new List<Boolean>();
-    results.add(QuiddityGuard.isApiQuiddity());
-    return results;
+    return new List<Boolean>{ QuiddityGuard.isApiQuiddity() };
   }
 }

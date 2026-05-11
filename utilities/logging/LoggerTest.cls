@@ -1,13 +1,14 @@
 /**
  * @description Test class for the Logger utility.
  * Validates the logging functionality, including message formatting and logging levels.
- * @group Utilities
+ * @group Logger
+ * @see Logger
  * @author David Wood
  * @since August 2024
- * @see Logger
+ * @last May 2026 — Wave 6 conformance
  */
 @isTest
-public class LoggerTest {
+public without sharing class LoggerTest {
   @TestSetup
   static void makeData() {
     TestFactory.createTestUser();

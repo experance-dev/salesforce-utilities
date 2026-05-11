@@ -1,39 +1,25 @@
 /**
- * @description Batch class for cleaning up old log records.
- * This class deletes both Block_Trigger_Log__c and ATM_Endpoint_Log__c records older than a specified number of days.
- * Implements Database.Stateful to maintain state across transaction boundaries.
- *
+ * @description Schedulable entry point that fires `LogCleanupBatch` on its
+ *              configured cron schedule.  Contains no business logic; delegates
+ *              entirely to the batch.  `global` is required so external orgs
+ *              (e.g. subscriber orgs in a managed package) can schedule this
+ *              class via the Setup UI or `System.schedule()`.
+ * @group LogCleanup
  * @author David Wood
  * @since November 2024
- * @group Logging
+ * @last May 2026 — conformance refactor: header cleanup, removed context
+ *                   field and passthrough (scheduler owns no business state),
+ *                   kept global + without sharing.
  */
 @SuppressWarnings('PMD.AvoidGlobalModifier')
 global without sharing class LogCleanupScheduler implements Schedulable {
-  private LogCleanupContext context;
 
   /**
-   * @description Constructor for the LogCleanupScheduler class.
-   */
-  public LogCleanupScheduler() {
-    this.context = new LogCleanupContext();
-  }
-
-  /**
-   * @description Test Constructor for the LogCleanupScheduler class.
-   * @param context The LogCleanupContext to use for testing.
-   */
-  @TestVisible
-  public LogCleanupScheduler(LogCleanupContext context) {
-    this.context = context;
-  }
-
-  /**
-   * @description Execute method for the Schedulable interface. Starts the LogCleanupBatch.
+   * @description Launches `LogCleanupBatch` with the default production context.
    *
    * @param sc The schedulable context reference.
    */
   global void execute(SchedulableContext sc) {
-    // Start the batch job with injected context
-    Database.executeBatch(new LogCleanupBatch(this.context));
+    Database.executeBatch(new LogCleanupBatch());
   }
 }

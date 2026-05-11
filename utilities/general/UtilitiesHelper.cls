@@ -3,9 +3,10 @@
  * @license Licensed under Creative Commons Attribution 4.0 International. Use, distribute, and modify this code as you see fit.
  * @author David Wood
  * @since June 2024
+ * @last May 2026 — conformance refactor; changed to inherited sharing to match Utilities caller context
  * @group Utilities
  */
-public with sharing class UtilitiesHelper {
+public inherited sharing class UtilitiesHelper {
   /**
    * @description Creates a dynamic map of Id to SObject based on the specified key.
    * @param objType The type of the SObject.

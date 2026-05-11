@@ -3,27 +3,41 @@
  * This class provides methods to set the email properties such as sender, recipient, subject, and body.
  * It also provides methods to send the email and handle any errors that occur during the sending process.
  *
- * @group   EmailMessaging
+ * Uses `with sharing` so that record-level visibility for Contact/User/Lead lookups honors the
+ * running user's sharing rules. Email sending itself is not sharing-sensitive, but keeping sharing
+ * enforced is the safe default and consistent with caller expectations.
+ *
+ * @group   Email
  * @author  David Wood
  * @since   April 2024
+ * @last    May 2026 — Wave 5 conformance: explicit sharing, Logger, SingleEmailException, header cleanup
  */
 public with sharing class SingleEmail {
-  private static final Integer RECURSION_MAX = 5; // Maximum recursion depth for preventing infinite loops
+  // ─── Inner exception ────────────────────────────────────────────────────────
 
-  public List<String> toAddresses; // List of recipient email addresses
-  public List<String> ccAddresses; // List of CC email addresses
-  public List<String> bccAddresses; // List of BCC email addresses
-  public String senderDisplayName; // Display name for the email sender
-  public String replyTo; // Reply-to email address
-  public String subject; // Subject of the email
-  public String plainBody; // Plain text body of the email
-  public String htmlBody; // HTML body of the email
-  public Boolean allOrNone; // Flag to indicate whether the email sending should be all-or-none
+  /** Custom exception for SingleEmail errors. */
+  public class SingleEmailException extends UtilitiesModuleException {}
 
-  /**
-   * @description Default constructor for the SingleEmail class.
-   * Initializes the toAddresses, ccAddresses, bccAddresses, and allOrNone properties.
-   */
+  // ─── Constants ──────────────────────────────────────────────────────────────
+
+  private static final Integer RECURSION_MAX = 5;
+  @TestVisible
+  private static final String DEFAULT_SENDER_DISPLAY_NAME = 'Salesforce Support';
+
+  // ─── Public properties ──────────────────────────────────────────────────────
+
+  public List<String> toAddresses;
+  public List<String> ccAddresses;
+  public List<String> bccAddresses;
+  public String senderDisplayName;
+  public String replyTo;
+  public String subject;
+  public String plainBody;
+  public String htmlBody;
+  public Boolean allOrNone;
+
+  // ─── Constructors ───────────────────────────────────────────────────────────
+
   public SingleEmail() {
     this.toAddresses = new List<String>();
     this.ccAddresses = new List<String>();
@@ -32,10 +46,8 @@ public with sharing class SingleEmail {
   }
 
   /**
-   * @description Constructor for the SingleEmail class that allows setting the toAddress, subject, and plainBody properties.
-   * Initializes the toAddresses, ccAddresses, bccAddresses, subject, plainBody, and allOrNone properties.
    * @param toAddress The email address of the recipient.
-   * @param subject The subject of the email.
+   * @param subject   The subject of the email.
    * @param plainBody The plain text body of the email.
    */
   public SingleEmail(String toAddress, String subject, String plainBody) {
@@ -47,9 +59,11 @@ public with sharing class SingleEmail {
     this.allOrNone = false;
   }
 
+  // ─── Public API ─────────────────────────────────────────────────────────────
+
   /**
-   * @description Sends the email message.
-   * @return A boolean value indicating whether the email was sent successfully.
+   * Sends the email message.
+   * @return `true` if the email was sent successfully; `false` if there were no recipients.
    */
   public Boolean sendMail() {
     Integer recipients =
@@ -58,65 +72,71 @@ public with sharing class SingleEmail {
       bccAddresses.size();
 
     if (recipients == 0) {
-      // No recipients to send the email to
       return false;
     }
 
-    Messaging.reserveSingleEmailCapacity(recipients);
-    Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
-    mail.setToAddresses(toAddresses);
-    mail.setCcAddresses(ccAddresses);
-    mail.setBccAddresses(bccAddresses);
+    try {
+      Messaging.reserveSingleEmailCapacity(recipients);
+      Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+      mail.setToAddresses(toAddresses);
+      mail.setCcAddresses(ccAddresses);
+      mail.setBccAddresses(bccAddresses);
+      mail.setSenderDisplayName(
+        senderDisplayName != null ? senderDisplayName : DEFAULT_SENDER_DISPLAY_NAME
+      );
+      mail.setReplyTo(replyTo);
+      mail.setSubject(subject);
 
-    if (senderDisplayName != null) {
-      mail.setSenderDisplayName(senderDisplayName);
-    } else {
-      mail.setSenderDisplayName('Salesforce Support');
+      if (plainBody != null) {
+        mail.setPlainTextBody(plainBody);
+      }
+      if (htmlBody != null) {
+        mail.setHtmlBody(htmlBody);
+      }
+
+      Messaging.SendEmailResult[] results;
+
+      if (!Test.isRunningTest()) {
+        results = Messaging.sendEmail(
+          new List<Messaging.SingleEmailMessage>{ mail },
+          allOrNone
+        );
+      } else {
+        results = new Messaging.SendEmailResult[0];
+      }
+
+      return inspectResults(results);
+    } catch (Exception e) {
+      Logger.logException(e, 'SingleEmail', 'sendMail');
+      throw new SingleEmailException(
+        'An error occurred while sending email: '
+          + e.getMessage()
+          + ' - '
+          + e.getStackTraceString()
+      );
     }
-
-    mail.setReplyTo(replyTo);
-    mail.setSubject(subject);
-
-    if (plainBody != null) {
-      mail.setPlainTextBody(plainBody);
-    }
-    if (htmlBody != null) {
-      mail.setHtmlBody(htmlBody);
-    }
-
-    Messaging.SendEmailResult[] results;
-
-    if (!Test.isRunningTest()) {
-      List<Messaging.SingleEmailMessage> mails = new List<Messaging.SingleEmailMessage>{
-        mail
-      };
-      results = Messaging.sendEmail(mails, allOrNone);
-    } else {
-      results = new Messaging.SendEmailResult[0]; // Mock results for testing
-    }
-
-    return inspectResults(results);
   }
 
+  // ─── Private helpers ────────────────────────────────────────────────────────
+
   /**
-   * @description Helper method to inspect the results of the email sending operation.
-   * @param results An array of SendEmailResult objects representing the results of the email sending operation.
-   * @return A boolean value indicating whether the email was sent successfully.
+   * Inspects send results and logs individual failures.
+   * @param results Array of SendEmailResult objects from Messaging.sendEmail.
+   * @return `true` if all results succeeded (or results is empty).
    */
   @TestVisible
   private static Boolean inspectResults(Messaging.SendEmailResult[] results) {
-    Boolean sendResult = true;
-
     if (results == null && Test.isRunningTest()) {
       return true;
     }
 
+    Boolean sendResult = true;
     for (Messaging.SendEmailResult res : results) {
       if (!res.isSuccess()) {
         sendResult = false;
-        System.debug(
-          'The following errors occurred sending email: ' + res.getErrors()
-        ); //NOPMD.AvoidDebugStatements
+        Logger.warn(
+          'SingleEmail.inspectResults: send failure — ' + res.getErrors()
+        );
       }
     }
     return sendResult;

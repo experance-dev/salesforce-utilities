@@ -1,27 +1,21 @@
 /**
- * @description This is a test class for the UtilitiesHelper class.
- * It contains test methods to verify the functionality of the UtilitiesHelper class.
+ * @description Test coverage for the UtilitiesHelper class.
  *
- * @group Utilities
+ * @group General
  * @see UtilitiesHelper
  *
  * @author David Wood
  * @since June 2024
+ * @last May 2026 — Wave 6 conformance
  */
 @isTest
-public with sharing class UtilitiesHelperTest {
+public without sharing class UtilitiesHelperTest {
   @TestSetup
-  /**
-   * @description This method is responsible for generating test data.
-   */
   static void makeData() {
     TestFactory.createMinAccessUser(true);
   }
 
   @isTest
-  /**
-   * @description This method tests the 'createDynamicIdMap' method.
-   */
   static void testCreateDynamicIdMap() {
     List<Account> accounts = new List<Account>();
     accounts.add(
@@ -60,9 +54,6 @@ public with sharing class UtilitiesHelperTest {
   }
 
   @isTest
-  /**
-   * @description This method tests the 'createDynamicStringMap' method.
-   */
   static void testCreateDynamicStringMap() {
     List<Account> accounts = new List<Account>();
     accounts.add(
@@ -101,9 +92,6 @@ public with sharing class UtilitiesHelperTest {
   }
 
   @isTest
-  /**
-   * @description This method tests the 'createDynamicIdListMap' method.
-   */
   static void testCreateDynamicIdListMap() {
     List<Contact> contacts = (List<Contact>) TestFactory.createSObjectList(
       new Contact(),

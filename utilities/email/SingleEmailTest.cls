@@ -1,19 +1,18 @@
 /**
- * @description This class contains test methods for the SingleEmail class.
+ * @description Test class for SingleEmail.
+ * @group Email
+ * @see SingleEmail
+ * @author David Wood
+ * @since March 2024
+ * @last May 2026 — Wave 6 conformance
  */
 @isTest
-public class SingleEmailTest {
-  /**
-   * @description This method is used to set up test data before running the test methods.
-   */
+public without sharing class SingleEmailTest {
   @TestSetup
   static void makeData() {
     TestFactory.createTestUser();
   }
 
-  /**
-   * @description Positive test for sending an email with minimum required fields.
-   */
   @isTest
   static void testSendEmailWithMinimumFields() {
     Test.startTest();
@@ -26,14 +25,11 @@ public class SingleEmailTest {
       Boolean result = email.sendMail();
 
       // As we are running in a test context, sendMail() should return true
-      System.assertEquals(true, result, 'sendMail() should return true');
+      Assert.areEqual(true, result, 'sendMail() should return true');
     }
     Test.stopTest();
   }
 
-  /**
-   * @description Positive test for sending an email with all fields filled.
-   */
   @isTest
   static void testSendEmailWithAllFields() {
     Test.startTest();
@@ -50,14 +46,11 @@ public class SingleEmailTest {
 
       Boolean result = email.sendMail();
 
-      System.assertEquals(true, result, 'sendMail() should return true');
+      Assert.areEqual(true, result, 'sendMail() should return true');
     }
     Test.stopTest();
   }
 
-  /**
-   * @description Negative test for sending an email without recipients.
-   */
   @isTest
   static void testSendEmailNoRecipients() {
     Test.startTest();
@@ -69,7 +62,7 @@ public class SingleEmailTest {
       Boolean result = email.sendMail();
 
       // No recipients should lead to sendMail returning false
-      System.assertEquals(
+      Assert.areEqual(
         false,
         result,
         'No recipients should lead to sendMail returning false'
@@ -78,9 +71,6 @@ public class SingleEmailTest {
     Test.stopTest();
   }
 
-  /**
-   * @description Test for the constructor that takes parameters.
-   */
   @isTest
   static void testConstructorWithParams() {
     Test.startTest();
@@ -92,28 +82,28 @@ public class SingleEmailTest {
       );
 
       // Verify that the email has one recipient
-      System.assertEquals(
+      Assert.areEqual(
         1,
         email.toAddresses.size(),
         'The email should have one recipient'
       );
 
       // Verify that the recipient is 'test@example.com'
-      System.assertEquals(
+      Assert.areEqual(
         'test@example.com',
         email.toAddresses[0],
         'The recipient should be test@example.com'
       );
 
       // Verify that the subject of the email is 'Subject'
-      System.assertEquals(
+      Assert.areEqual(
         'Subject',
         email.subject,
         'The subject should be Subject'
       );
 
       // Verify that the plain body of the email is 'Body'
-      System.assertEquals(
+      Assert.areEqual(
         'Body',
         email.plainBody,
         'The plain body should be Body'

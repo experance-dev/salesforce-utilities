@@ -1,17 +1,21 @@
 /**
- * @class DMLManagerInert
- * @description This class extends the DMLManager.SimpleDML class and is used to manage DML operations in an inert manner.
- *
- * @see DMLManager.SimpleDML
+ * @description No-op DML implementation for use in tests or dry-run contexts where real DML must be
+ *              suppressed. Extends SimpleDML and overrides every method to log and return immediately
+ *              without touching the database.
+ *              Uses `inherited sharing` to remain consistent with the DML stack sharing convention,
+ *              even though no queries or DML are executed.
+ * @group DML
+ * @author David Wood
+ * @since May 2024
+ * @last May 2026 — Wave 2 conformance refactor; corrected copy-paste log messages
  */
-public with sharing class DMLManagerInert extends DMLManager.SimpleDML {
+public inherited sharing class DMLManagerInert extends DMLManager.SimpleDML {
   public override void dmlDelete(List<SObject> recordsToDelete) {
     Logger.debug(
-      'Inserting ' + JSON.serializePretty(recordsToDelete),
+      'Deleting ' + JSON.serializePretty(recordsToDelete),
       'DMLManager',
-      'dmlInsert'
+      'dmlDelete'
     );
-    return;
   }
 
   public override void dmlInsert(List<SObject> recordsToInsert) {
@@ -20,11 +24,10 @@ public with sharing class DMLManagerInert extends DMLManager.SimpleDML {
       'DMLManager',
       'dmlInsert'
     );
-    return;
   }
 
   public override void dmlMerge(
-    sObject masterRecord,
+    SObject masterRecord,
     List<SObject> duplicateRecords
   ) {
     Logger.debug(
@@ -35,24 +38,21 @@ public with sharing class DMLManagerInert extends DMLManager.SimpleDML {
       'DMLManager',
       'dmlMerge'
     );
-    return;
   }
 
   public override void dmlUpdate(List<SObject> recordsToUpdate) {
     Logger.debug(
-      'Inserting ' + JSON.serializePretty(recordsToUpdate),
+      'Updating ' + JSON.serializePretty(recordsToUpdate),
       'DMLManager',
-      'dmlInsert'
+      'dmlUpdate'
     );
-    return;
   }
 
   public override void dmlUpsert(List<SObject> recordsToUpsert) {
     Logger.debug(
-      'Inserting ' + JSON.serializePretty(recordsToUpsert),
+      'Upserting ' + JSON.serializePretty(recordsToUpsert),
       'DMLManager',
-      'dmlInsert'
+      'dmlUpsert'
     );
-    return;
   }
 }
