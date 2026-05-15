@@ -944,6 +944,18 @@ private without sharing class DMLManagerTest {
    *              that grants the supplied user CRUD on `objectType`. Setup-object
    *              DML happens under System.runAs(adminUser) to avoid MIXED_DML
    *              when callers have already touched non-setup data.
+   *
+   *              Salesforce enforces ObjectPermissions dependencies WITHIN a
+   *              permset: "Read Account" requires "Read Contact" be present on
+   *              the same permset; "Read Opportunity" requires "Read Account"
+   *              (and therefore "Read Contact"). The dependency-satisfier rows
+   *              below grant the upstream READs on this permset alongside the
+   *              requested CRUD so the platform's FIELD_INTEGRITY_EXCEPTION
+   *              (`Permission Read Account depends on permission(s): Read
+   *              Contact`) does not fire at insert time. The dependency rows
+   *              are read-only, so they don't widen the test's semantic intent
+   *              (which is to grant the caller-specified CRUD on `objectType`
+   *              only).
    */
   @SuppressWarnings('PMD.ExcessiveParameterList')
   private static void assignObjectPermission(
@@ -960,21 +972,54 @@ private without sharing class DMLManagerTest {
       );
       DMLManager.insertAsSystem(ps);
 
-      ObjectPermissions oPerm = new ObjectPermissions(
-        ParentId = ps.Id,
-        PermissionsRead = true,
-        PermissionsCreate = create,
-        PermissionsEdit = edit,
-        PermissionsDelete = remove,
-        SObjectType = objectType
-      );
-      DMLManager.insertAsSystem(oPerm);
+      List<ObjectPermissions> perms = new List<ObjectPermissions>{
+        new ObjectPermissions(
+          ParentId = ps.Id,
+          PermissionsRead = true,
+          PermissionsCreate = create,
+          PermissionsEdit = edit,
+          PermissionsDelete = remove,
+          SObjectType = objectType
+        )
+      };
+      for (String dependency : getReadDependencies(objectType)) {
+        perms.add(
+          new ObjectPermissions(
+            ParentId = ps.Id,
+            PermissionsRead = true,
+            SObjectType = dependency
+          )
+        );
+      }
+      DMLManager.insertAsSystem(perms);
 
       PermissionSetAssignment assign = new PermissionSetAssignment(
         AssigneeId = u.Id,
         PermissionSetId = ps.Id
       );
       DMLManager.insertAsSystem(assign);
+    }
+  }
+
+  /**
+   * @description Returns the upstream SObject reads that must accompany a
+   *              `Read <objectType>` grant on the same permset to satisfy the
+   *              platform's permission-dependency rules. Currently encodes the
+   *              two chains exercised by this suite (Account → Contact;
+   *              Opportunity → Account → Contact). Extend as new objects join
+   *              the suite.
+   */
+  private static List<String> getReadDependencies(String objectType) {
+    switch on objectType {
+      when 'Account' {
+        return new List<String>{ 'Contact' };
+      }
+      when 'Opportunity' {
+        return new List<String>{ 'Account', 'Contact' };
+      }
+      when else {
+        return new List<String>{};
+      }
     }
   }
 
