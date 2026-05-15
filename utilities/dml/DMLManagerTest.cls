@@ -109,6 +109,7 @@ private without sharing class DMLManagerTest {
 
     User restrictedUser = getRestrictedUser();
     assignObjectPermission(restrictedUser, 'Opportunity', true, true, true);
+    grantFlsForTemplate(restrictedUser, o1);
 
     System.runAs(restrictedUser) {
       DMLManager.insertAsSystem(new List<Opportunity>{ o1 });
@@ -128,9 +129,10 @@ private without sharing class DMLManagerTest {
 
     User restrictedUser = getRestrictedUser();
     assignObjectPermission(restrictedUser, 'Account', true, true, true);
+    a1.ShippingCity = 'Apple';
+    grantFlsForTemplate(restrictedUser, a1);
 
     System.runAs(restrictedUser) {
-      a1.ShippingCity = 'Apple';
       DMLManager.updateAsSystem(new List<Account>{ a1 });
       Account a1Reload = [SELECT ShippingCity FROM Account WHERE Id = :a1.Id];
       Assert.areEqual(
@@ -149,6 +151,7 @@ private without sharing class DMLManagerTest {
 
     User restrictedUser = getRestrictedUser();
     assignObjectPermission(restrictedUser, 'Account', true, true, true);
+    grantFlsForTemplate(restrictedUser, a1Clone);
 
     System.runAs(restrictedUser) {
       DMLManager.upsertAsSystem(new List<Account>{ a1Clone });
@@ -165,13 +168,15 @@ private without sharing class DMLManagerTest {
   static void systemDelete() {
     User restrictedUser = getRestrictedUser();
     assignObjectPermission(restrictedUser, 'Account', true, true, true);
+    Account pearTemplate = (Account) TestFactory.createSObject(
+      new Account(Name = 'Pear Account'),
+      false
+    );
+    grantFlsForTemplate(restrictedUser, pearTemplate);
 
     System.runAs(restrictedUser) {
-      Account a1 = (Account) TestFactory.createSObject(
-        new Account(Name = 'Pear Account'),
-        true
-      );
-      DMLManager.deleteAsSystem(a1);
+      DMLManager.insertAsSystem(pearTemplate);
+      DMLManager.deleteAsSystem(pearTemplate);
     }
 
     List<Account> a1Reload = [
@@ -975,16 +980,6 @@ private without sharing class DMLManagerTest {
       );
       DMLManager.insertAsSystem(ps);
 
-      // Positive-path tests that grant full CRUD on the object also need FLS
-      // bypass so the DMLManager.*AsSystem assertions don't fail at the
-      // USER_MODE DML site with "fields being inaccessible" on fields the
-      // assignee lacks FLS on (which is every field, for the Minimum Access
-      // profile). PermissionsModifyAllRecords on the object-permissions row
-      // grants record-level + field-level bypass for that object only — no
-      // system-permission dependency chain, unlike PermissionsModifyAllData on
-      // the PermissionSet. Negative-path tests (partial CRUD) leave this off
-      // so the platform's denial paths fire as expected.
-      Boolean grantsFullCrud = create && edit && remove;
       List<ObjectPermissions> perms = new List<ObjectPermissions>{
         new ObjectPermissions(
           ParentId = ps.Id,
@@ -992,8 +987,6 @@ private without sharing class DMLManagerTest {
           PermissionsCreate = create,
           PermissionsEdit = edit,
           PermissionsDelete = remove,
-          PermissionsViewAllRecords = grantsFullCrud,
-          PermissionsModifyAllRecords = grantsFullCrud,
           SObjectType = objectType
         )
       };
@@ -1013,6 +1006,64 @@ private without sharing class DMLManagerTest {
         PermissionSetId = ps.Id
       );
       DMLManager.insertAsSystem(assign);
+    }
+  }
+
+  /**
+   * @description Grants the restricted user FLS Edit on every populated field
+   *              of `template` by appending FieldPermissions rows to the
+   *              Enable&lt;ObjectType&gt; permset already created by
+   *              assignObjectPermission. Salesforce caches FieldPermissions
+   *              at a deeper tier than ObjectPermissions — adding FLS via a
+   *              separate permset and PSA mid-test doesn't always take
+   *              effect on the running user's effective FLS, but appending
+   *              to an existing permset the user already holds does.
+   *              Per-row insert with allOrNone=false so consumer orgs that
+   *              reject FLS on a particular field (read-only customs,
+   *              compound sub-components) don't break the whole grant.
+   */
+  private static void grantFlsForTemplate(User u, SObject template) {
+    String objectType = String.valueOf(template.getSObjectType());
+    Map<String, Object> populatedFields = template.getPopulatedFieldsAsMap();
+    System.runAs(getAdminUser()) {
+      PermissionSet ps = [
+        SELECT Id
+        FROM PermissionSet
+        WHERE Name = :('Enable' + objectType)
+        LIMIT 1
+      ];
+      Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe()
+        .get(objectType)
+        .getDescribe()
+        .fields.getMap();
+      List<FieldPermissions> rows = new List<FieldPermissions>();
+      for (String fieldName : populatedFields.keySet()) {
+        if (!fieldMap.containsKey(fieldName.toLowerCase())) {
+          continue;
+        }
+        Schema.DescribeFieldResult fr = fieldMap.get(fieldName.toLowerCase())
+          .getDescribe();
+        if (
+          !fr.isPermissionable() ||
+          fr.isCalculated() ||
+          !fr.isUpdateable() ||
+          !fr.isCreateable()
+        ) {
+          continue;
+        }
+        rows.add(
+          new FieldPermissions(
+            ParentId = ps.Id,
+            SobjectType = objectType,
+            Field = objectType + '.' + fr.getName(),
+            PermissionsRead = true,
+            PermissionsEdit = true
+          )
+        );
+      }
+      if (!rows.isEmpty()) {
+        Database.insert(rows, false, AccessLevel.SYSTEM_MODE);
+      }
     }
   }
 
