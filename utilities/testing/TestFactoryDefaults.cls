@@ -10,18 +10,26 @@
  * @group Testing
  * @author David Wood
  * @since December 2020
- * @last August 2026 — portability split: org-specific defaults removed to keep the shared core clean-org deployable
+ * @last August 2026 — portability split (org-specific defaults removed for clean-org deployability);
+ *                      ApexDoc completed across the public surface
  */
 @IsTest
 public without sharing class TestFactoryDefaults {
+  /** @description Product family assigned by Product2Defaults; assert against this rather than a literal. */
   public static final String DEFAULT_PRODUCT_FAMILY = 'TestFam';
+  /** @description Permission set TestFactory.createTestUser() assigns by default; ships with this library. */
   public static final String TEST_USER_PERMISSION = 'Utilities_Test_User';
 
   // ── Standard object defaults ─────────────────────────────────────────────
 
+  /** @description Field defaults for Account, with randomised name and address values. */
   public class AccountDefaults implements TestFactory.FieldDefaults {
     String randomizer = Utilities.generateRandomCounter();
 
+    /**
+     * @description Supplies the Account field defaults.
+     * @return Map of SObjectField to default value.
+     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       return new Map<Schema.SObjectField, Object>{
         Account.Name => 'Test Account' + randomizer,
@@ -37,7 +45,12 @@ public without sharing class TestFactoryDefaults {
     }
   }
 
+  /** @description Field defaults for User on the Standard User profile, with a throwaway-domain email. */
   public class UserDefaults implements TestFactory.FieldDefaults {
+    /**
+     * @description Supplies the User field defaults.
+     * @return Map of SObjectField to default value.
+     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       String code = Utilities.generateRandomCounter();
       // SOQL: profile lookup; acceptable in test context.
@@ -61,7 +74,12 @@ public without sharing class TestFactoryDefaults {
     }
   }
 
+  /** @description Field defaults for Contact without a parent Account. */
   public class ContactDefaults implements TestFactory.FieldDefaults {
+    /**
+     * @description Supplies the Contact field defaults.
+     * @return Map of SObjectField to default value.
+     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       return new Map<Schema.SObjectField, Object>{
         Contact.FirstName => 'First',
@@ -71,9 +89,14 @@ public without sharing class TestFactoryDefaults {
     }
   }
 
+  /** @description Field defaults for Contact, inserting a parent Account and linking to it. */
   public class ContactWithAccountDefaults implements TestFactory.FieldDefaults {
     Account account = (Account) TestFactory.createSObject(new Account(), true);
 
+    /**
+     * @description Supplies the Contact field defaults, including the inserted parent AccountId.
+     * @return Map of SObjectField to default value.
+     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       return new Map<Schema.SObjectField, Object>{
         Contact.FirstName => 'First',
@@ -84,7 +107,12 @@ public without sharing class TestFactoryDefaults {
     }
   }
 
+  /** @description Field defaults for Opportunity without a parent Account. */
   public class OpportunityDefaults implements TestFactory.FieldDefaults {
+    /**
+     * @description Supplies the Opportunity field defaults.
+     * @return Map of SObjectField to default value.
+     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       String code = Utilities.generateRandomCounter();
       return new Map<Schema.SObjectField, Object>{
@@ -95,7 +123,12 @@ public without sharing class TestFactoryDefaults {
     }
   }
 
+  /** @description Field defaults for Opportunity, inserting a parent Account and linking to it. */
   public class OpportunityWithAccountDefaults implements TestFactory.FieldDefaults {
+    /**
+     * @description Supplies the Opportunity field defaults, including the inserted parent AccountId.
+     * @return Map of SObjectField to default value.
+     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       String code = Utilities.generateRandomCounter();
       Account account = (Account) TestFactory.createSObject(
@@ -111,7 +144,12 @@ public without sharing class TestFactoryDefaults {
     }
   }
 
+  /** @description Field defaults for OpportunityLineItem. */
   public class OpportunityLineItemDefaults implements TestFactory.FieldDefaults {
+    /**
+     * @description Supplies the OpportunityLineItem field defaults.
+     * @return Map of SObjectField to default value.
+     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       return new Map<Schema.SObjectField, Object>{
         OpportunityLineItem.Quantity => 1
@@ -119,7 +157,12 @@ public without sharing class TestFactoryDefaults {
     }
   }
 
+  /** @description Field defaults for Campaign. */
   public class CampaignDefaults implements TestFactory.FieldDefaults {
+    /**
+     * @description Supplies the Campaign field defaults.
+     * @return Map of SObjectField to default value.
+     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       String code = Utilities.generateRandomCounter();
       return new Map<Schema.SObjectField, Object>{
@@ -128,7 +171,12 @@ public without sharing class TestFactoryDefaults {
     }
   }
 
+  /** @description Field defaults for Case. */
   public class CaseDefaults implements TestFactory.FieldDefaults {
+    /**
+     * @description Supplies the Case field defaults.
+     * @return Map of SObjectField to default value.
+     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       return new Map<Schema.SObjectField, Object>{
         Case.Subject => 'Test Case'
@@ -136,7 +184,12 @@ public without sharing class TestFactoryDefaults {
     }
   }
 
+  /** @description Field defaults for Lead. */
   public class LeadDefaults implements TestFactory.FieldDefaults {
+    /**
+     * @description Supplies the Lead field defaults.
+     * @return Map of SObjectField to default value.
+     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       return new Map<Schema.SObjectField, Object>{
         Lead.LastName => 'Test Lead',
@@ -145,7 +198,12 @@ public without sharing class TestFactoryDefaults {
     }
   }
 
+  /** @description Field defaults for an active Product2 in the library's default family. */
   public class Product2Defaults implements TestFactory.FieldDefaults {
+    /**
+     * @description Supplies the Product2 field defaults.
+     * @return Map of SObjectField to default value.
+     */
     public Map<Schema.SObjectField, Object> getFieldDefaults() {
       String code = Utilities.generateRandomCounter();
       return new Map<Schema.SObjectField, Object>{

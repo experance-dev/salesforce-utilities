@@ -5,25 +5,29 @@
  * @author David Wood
  * @since March 2024
  * @last May 2026 — conformance refactor
+ * @last August 2026 — mailinator test domain, depth-limit assert targets the genuinely-excluded user, admin-context setup DML
  */
 @isTest
 public without sharing class GroupMemberEmailRetrieverTest {
   static final String TEST_GROUP_NAME = 'group0';
-  static final String TEST_EMAIL = 'other@maininator.com';
+  static final String TEST_EMAIL = 'other@mailinator.com';
   static final String TEST_JUNK = 'junk';
+  // users[4] sits in group8, six nesting levels below group0 — past the depth guard.
+  static final String DEPTH_EXCLUDED_EMAIL = 'user5@mailinator.com';
 
   @TestSetup
   static void makeData() {
+    // User, Group, and GroupMember are setup objects — all of their DML runs under an
+    // explicit admin context so the MIXED_DML boundary holds regardless of org automation.
+    User adminUser = TestFactory.createTestUser(true, 'System Administrator');
+
     Integer numberUsers = 5;
     List<User> users = new List<User>();
     for (Integer i = 0; i < numberUsers; i++) {
       User newUser = TestFactory.createTestUser(false, 'Standard User');
-      newUser.Email = 'user' + (i + 1) + '@maininator.com';
+      newUser.Email = 'user' + (i + 1) + '@mailinator.com';
       users.add(newUser);
     }
-    insert users;
-
-    TestFactory.createMinAccessUser(true);
 
     List<Group> groups = new List<Group>();
 
@@ -33,7 +37,12 @@ public without sharing class GroupMemberEmailRetrieverTest {
       newGroup.DeveloperName = 'group' + i;
       groups.add(newGroup);
     }
-    insert groups;
+
+    System.runAs(adminUser) {
+      insert users;
+      TestFactory.createMinAccessUser(true);
+      insert groups;
+    }
 
     List<GroupMember> groupMembers = new List<GroupMember>();
     //group 0 members
@@ -88,7 +97,9 @@ public without sharing class GroupMemberEmailRetrieverTest {
     groupMembers.add(
       new GroupMember(GroupId = groups[3].Id, UserOrGroupId = groups[1].Id)
     );
-    insert groupMembers;
+    System.runAs(adminUser) {
+      insert groupMembers;
+    }
   }
 
   @isTest
@@ -107,10 +118,15 @@ public without sharing class GroupMemberEmailRetrieverTest {
     }
     Test.stopTest();
 
-    Assert.areEqual(5, emails.size(), 'Should have 4 emails');
-    Assert.isTrue(
-      !emails.contains('user4@mailinator.com'),
-      'Should not have user4'
+    // Five emails: the direct address plus users 1-4, resolved through group nesting.
+    Assert.areEqual(
+      5,
+      emails.size(),
+      'Should have 5 emails: the direct address plus the four in-depth group members'
+    );
+    Assert.isFalse(
+      emails.contains(DEPTH_EXCLUDED_EMAIL),
+      'user5 sits past the recursion-depth guard and must be excluded'
     );
   }
 

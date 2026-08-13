@@ -1,11 +1,13 @@
 /**
  * @description Test class for UtilPickLists. Ensures that picklist utility functions work as expected,
- * covering both positive scenarios and edge cases.
+ * covering both positive scenarios and edge cases. Portable by design: expected values are derived
+ * from the running org's Account.Type describe at runtime instead of assuming any specific entry.
  * @group Picklists
  * @see UtilPickLists
  * @author David Wood
  * @since 2024
  * @last May 2026 — conformance refactor
+ * @last August 2026 — portable describe-derived expectations; null-guard coverage for unknown sObject names
  */
 @isTest
 public without sharing class UtilPickListsTest {
@@ -14,20 +16,66 @@ public without sharing class UtilPickListsTest {
     TestFactory.createMinAccessUser(true); // Create a user with minimal permissions.
   }
 
+  /**
+   * @description Picks an active Account.Type value from the running org's describe.
+   *              Prefers a value with an uppercase letter and length >= 4 so the
+   *              case-insensitive and prefix round-trips are meaningful.
+   * @return An active picklist value, or null when the org has none.
+   */
+  private static String deriveActiveTypeValue() {
+    String fallback = null;
+    for (
+      Schema.PicklistEntry entry : Account.Type.getDescribe()
+        .getPicklistValues()
+    ) {
+      if (!entry.isActive()) {
+        continue;
+      }
+      String value = entry.getValue();
+      if (fallback == null) {
+        fallback = value;
+      }
+      // equals(), not ==, because Apex String == compares case-insensitively.
+      if (value.length() >= 4 && !value.equals(value.toLowerCase())) {
+        return value;
+      }
+    }
+    return fallback;
+  }
+
   @isTest
   static void testGetPicklistValues() {
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
-      // Attempt to retrieve picklist values for the 'Type' field on the Account object.
+      String knownValue = deriveActiveTypeValue();
       List<String> lstPicklistValues = UtilPickLists.getPicklistValues(
         'Account',
         'Type'
       );
 
-      // Verify that the list of picklist values is successfully retrieved and is not null.
-      Assert.isNotNull(
-        lstPicklistValues,
-        'Picklist values for Account.Type should not be null'
+      if (knownValue == null) {
+        // Org ships no active Account.Type values; the raw list may still hold inactive ones.
+        Assert.isNotNull(
+          lstPicklistValues,
+          'Picklist values for Account.Type should never be null.'
+        );
+      } else {
+        Assert.isFalse(
+          lstPicklistValues.isEmpty(),
+          'Picklist values for Account.Type should not be empty.'
+        );
+        Assert.isTrue(
+          lstPicklistValues.contains(knownValue),
+          'The list should contain the describe-derived value "' +
+            knownValue +
+            '".'
+        );
+      }
+
+      // Negative path: an unknown sObject name returns empty per the documented contract.
+      Assert.isTrue(
+        UtilPickLists.getPicklistValues('No_Such_Object__x', 'Type').isEmpty(),
+        'An unknown sObject name should return an empty list, not throw.'
       );
     }
     Test.stopTest();
@@ -37,40 +85,101 @@ public without sharing class UtilPickListsTest {
   static void testGetActivePickListValuesMapWithLabelsFromSObjectField() {
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
-      // Directly use the Account.Type field reference to retrieve the map of picklist values and their labels.
+      String knownValue = deriveActiveTypeValue();
       Map<String, String> pickListValueMap = UtilPickLists.getActivePickListValuesMapWithLabels(
         Account.Type
       );
 
-      // Check that the map is not null, indicating successful retrieval.
-      Assert.isNotNull(
-        pickListValueMap,
-        'Picklist values map for Account.Type should not be null'
+      if (knownValue == null) {
+        Assert.isTrue(
+          pickListValueMap.isEmpty(),
+          'With no active Account.Type values the map should be empty.'
+        );
+        return;
+      }
+
+      Assert.isFalse(
+        pickListValueMap.isEmpty(),
+        'The active-values map for Account.Type should not be empty.'
+      );
+      Assert.isTrue(
+        pickListValueMap.containsKey(knownValue),
+        'The map should key the describe-derived value "' + knownValue + '".'
+      );
+      Assert.isTrue(
+        String.isNotBlank(pickListValueMap.get(knownValue)),
+        'The describe-derived value should map to a non-blank label.'
       );
     }
     Test.stopTest();
   }
 
   @isTest
-  static void testGetPickListValue() {
+  static void testGetPickListMatchExact() {
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
-      Schema.SObjectField field = Account.Type; // Specify the field to test.
+      String knownValue = deriveActiveTypeValue();
+      if (knownValue == null) {
+        return; // No active values to round-trip in this org.
+      }
 
-      // Test for a case-sensitive match.
-      String value = UtilPickLists.getPickListMatch(field, 'Partner', true);
-      Assert.areEqual(
-        'Partner',
-        value,
-        'Expected to match the picklist value \'Partner\' with case sensitivity.'
+      String value = UtilPickLists.getPickListMatch(
+        Account.Type,
+        knownValue,
+        true
       );
-
-      // Test for a case-insensitive match.
-      value = UtilPickLists.getPickListMatch(field, 'Partner', false);
       Assert.areEqual(
-        'Partner',
+        knownValue,
         value,
-        'Expected to match the picklist value \'Partner\' without case sensitivity.'
+        'An exact search for an existing value should round-trip it.'
+      );
+    }
+    Test.stopTest();
+  }
+
+  @isTest
+  static void testGetPickListMatchCaseInsensitive() {
+    Test.startTest();
+    System.runAs(TestFactory.getMinAccessUser()) {
+      String knownValue = deriveActiveTypeValue();
+      if (knownValue == null) {
+        return; // No active values to round-trip in this org.
+      }
+
+      String value = UtilPickLists.getPickListMatch(
+        Account.Type,
+        knownValue.toLowerCase(),
+        false
+      );
+      Assert.areEqual(
+        knownValue,
+        value,
+        'A lowercased search should resolve to the real value via closest match.'
+      );
+    }
+    Test.stopTest();
+  }
+
+  @isTest
+  static void testGetPickListMatchClosestPrefix() {
+    Test.startTest();
+    System.runAs(TestFactory.getMinAccessUser()) {
+      String knownValue = deriveActiveTypeValue();
+      if (knownValue == null || knownValue.length() < 3) {
+        return; // Too short to build a meaningful prefix in this org.
+      }
+
+      // Drop the tail of the real value; the closest match should recover it.
+      String prefix = knownValue.substring(0, knownValue.length() - 2);
+      String value = UtilPickLists.getPickListMatch(
+        Account.Type,
+        prefix,
+        false
+      );
+      Assert.areEqual(
+        knownValue,
+        value,
+        'A prefix of the real value should resolve to it via closest match.'
       );
     }
     Test.stopTest();
@@ -127,77 +236,17 @@ public without sharing class UtilPickListsTest {
         value,
         'Should return an empty string when the search value is empty.'
       );
-    }
-    Test.stopTest();
-  }
 
-  @isTest
-  static void testCaseInsensitivePickListMatch() {
-    Test.startTest();
-    System.runAs(TestFactory.getMinAccessUser()) {
-      Schema.SObjectField field = Account.Type; // Specify the field to test.
-
-      // Test for a case-insensitive match.
-      String value = UtilPickLists.getPickListMatch(field, 'partner', false);
-      Assert.areEqual(
-        'Partner',
-        value,
-        'Expected to match the picklist value \'Partner\' without case sensitivity.'
-      );
-
-      value = UtilPickLists.getPickListMatch(field, 'PARTNER', false);
-      Assert.areEqual(
-        'Partner',
-        value,
-        'Expected to match the picklist value \'Partner\' without case sensitivity.'
-      );
-    }
-    Test.stopTest();
-  }
-
-  @isTest
-  static void testClosestPickListMatch() {
-    Test.startTest();
-    System.runAs(TestFactory.getMinAccessUser()) {
-      Schema.SObjectField field = Account.Type; // Specify the field to test.
-
-      // Test for a closest match.
-      String value = UtilPickLists.getPickListMatch(field, 'Partn', false);
-      Assert.areEqual(
-        'Partner',
-        value,
-        'Expected to find the closest match to \'Partn\' as \'Partner\'.'
-      );
-
-      value = UtilPickLists.getPickListMatch(field, 'Part', false);
-      Assert.areEqual(
-        'Partner',
-        value,
-        'Expected to find the closest match to \'Part\' as \'Partner\'.'
-      );
-    }
-    Test.stopTest();
-  }
-
-  @isTest
-  static void testInactivePickListValues() {
-    Test.startTest();
-    System.runAs(TestFactory.getMinAccessUser()) {
-      Schema.SObjectField field = Account.Type; // Specify the field to test.
-
-      // Simulate an inactive picklist value by creating a custom picklist field with inactive values.
-      // This requires setup in the org, which we assume is already done for this test case.
-
-      // Test for an inactive match.
-      String value = UtilPickLists.getPickListMatch(
+      // Exact search for a value no org would carry finds nothing.
+      value = UtilPickLists.getPickListMatch(
         field,
-        'InactiveValue',
+        'zz-no-such-picklist-value-zz',
         true
       );
       Assert.areEqual(
         '',
         value,
-        'Expected no match for inactive picklist values.'
+        'Should return an empty string when no value or label matches exactly.'
       );
     }
     Test.stopTest();

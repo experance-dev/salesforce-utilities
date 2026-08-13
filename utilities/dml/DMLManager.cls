@@ -1,4 +1,5 @@
 /**
+ * Copyright (c), PatronManager LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -29,14 +30,21 @@
  * @author David Wood
  * @since May 2024
  * @last May 2026 — USER_MODE migration; DMLManagerException now extends UtilitiesModuleException
+ * @last August 2026 — per-instance AccessLevel in SimpleDML (AsSystem statics now genuinely elevate);
+ *                      explicit AccessLevel on merge; hardened DMLHelper-only cache contract; ApexDoc completion
  */
 @SuppressWarnings('PMD.ExcessivePublicCount')
 public inherited sharing class DMLManager {
   // Swap this out in tests to inject mock or error-simulation DML behaviour.
   private static IDML dmlOperations = new SimpleDML();
+  private static IDML systemDmlOperations = new SimpleDML(AccessLevel.SYSTEM_MODE);
 
-  // Fields excluded from FLS restriction checks (auto-managed by the platform).
-  public static Set<String> exceptionValues = new Set<String>{
+  /**
+   * @description Fields excluded from FLS restriction checks (auto-managed by the platform).
+   *              Contract: read by DMLHelper only — no other consumer may reference or mutate it.
+   *              The reference is final; the set contents are the fixed platform-audit field list.
+   */
+  public static final Set<String> exceptionValues = new Set<String>{
     'id',
     'isdeleted',
     'createddate',
@@ -46,8 +54,12 @@ public inherited sharing class DMLManager {
     'lastmodifieddate'
   };
 
-  // Per-operation, per-SObjectType cache of fields the running user may not write.
-  public static Map<Operation, Map<SObjectType, List<String>>> cachedRestrictedFields = new Map<Operation, Map<SObjectType, List<String>>>();
+  /**
+   * @description Per-operation, per-SObjectType cache of fields the running user may not write.
+   *              Contract: populated and read by DMLHelper only — no other consumer may touch it.
+   *              The reference is final; DMLHelper owns all mutation of the cached contents.
+   */
+  public static final Map<Operation, Map<SObjectType, List<String>>> cachedRestrictedFields = new Map<Operation, Map<SObjectType, List<String>>>();
 
   /** @description Supported DML operations. */
   public enum Operation {
@@ -59,27 +71,40 @@ public inherited sharing class DMLManager {
 
   // ─── AsUser single-record overloads ───────────────────────────────────────
 
-  /** @param obj The SObject to insert. */
+  /**
+   * @description Inserts a single record after CRUD and FLS verification.
+   * @param obj The SObject to insert.
+   */
   public static void insertAsUser(SObject obj) {
     performDMLOperation(new List<SObject>{ obj }, Operation.OP_INSERT);
   }
 
-  /** @param obj The SObject to update. */
+  /**
+   * @description Updates a single record after CRUD and FLS verification.
+   * @param obj The SObject to update.
+   */
   public static void updateAsUser(SObject obj) {
     performDMLOperation(new List<SObject>{ obj }, Operation.OP_UPDATE);
   }
 
-  /** @param obj The SObject to upsert. */
+  /**
+   * @description Upserts a single record after CRUD and FLS verification.
+   * @param obj The SObject to upsert.
+   */
   public static void upsertAsUser(SObject obj) {
     performDMLOperation(new List<SObject>{ obj }, Operation.OP_UPSERT);
   }
 
-  /** @param obj The SObject to delete. */
+  /**
+   * @description Deletes a single record after CRUD verification.
+   * @param obj The SObject to delete.
+   */
   public static void deleteAsUser(SObject obj) {
     performDMLOperation(new List<SObject>{ obj }, Operation.OP_DELETE);
   }
 
   /**
+   * @description Merges one record into a master record after CRUD verification on both types.
    * @param masterObj The master SObject.
    * @param mergeObj The SObject to merge into masterObj.
    */
@@ -89,27 +114,40 @@ public inherited sharing class DMLManager {
 
   // ─── AsUser list overloads ────────────────────────────────────────────────
 
-  /** @param objList The list of SObjects to insert. */
+  /**
+   * @description Inserts a list of records after CRUD and FLS verification.
+   * @param objList The list of SObjects to insert.
+   */
   public static void insertAsUser(List<SObject> objList) {
     performDMLOperation(objList, Operation.OP_INSERT);
   }
 
-  /** @param objList The list of SObjects to update. */
+  /**
+   * @description Updates a list of records after CRUD and FLS verification.
+   * @param objList The list of SObjects to update.
+   */
   public static void updateAsUser(List<SObject> objList) {
     performDMLOperation(objList, Operation.OP_UPDATE);
   }
 
-  /** @param objList The list of SObjects to upsert. */
+  /**
+   * @description Upserts a list of records after CRUD and FLS verification.
+   * @param objList The list of SObjects to upsert.
+   */
   public static void upsertAsUser(List<SObject> objList) {
     performDMLOperation(objList, Operation.OP_UPSERT);
   }
 
-  /** @param objList The list of SObjects to delete. */
+  /**
+   * @description Deletes a list of records after CRUD verification.
+   * @param objList The list of SObjects to delete.
+   */
   public static void deleteAsUser(List<SObject> objList) {
     performDMLOperation(objList, Operation.OP_DELETE);
   }
 
   /**
+   * @description Merges a list of records into a master record after CRUD verification on both types.
    * @param masterObj The master SObject.
    * @param mergeList The list of SObjects to merge into masterObj.
    */
@@ -119,62 +157,88 @@ public inherited sharing class DMLManager {
 
   // ─── AsSystem single-record overloads ─────────────────────────────────────
 
-  /** @param obj The SObject to insert. */
+  /**
+   * @description Inserts a single record without pre-checks, via the configured DML implementation.
+   * @param obj The SObject to insert.
+   */
   public static void insertAsSystem(SObject obj) {
-    dmlOperations.dmlInsert(new List<SObject>{ obj });
-  }
-
-  /** @param obj The SObject to update. */
-  public static void updateAsSystem(SObject obj) {
-    dmlOperations.dmlUpdate(new List<SObject>{ obj });
-  }
-
-  /** @param obj The SObject to upsert. */
-  public static void upsertAsSystem(SObject obj) {
-    dmlOperations.dmlUpsert(new List<SObject>{ obj });
-  }
-
-  /** @param obj The SObject to delete. */
-  public static void deleteAsSystem(SObject obj) {
-    dmlOperations.dmlDelete(new List<SObject>{ obj });
+    systemDmlOperations.dmlInsert(new List<SObject>{ obj });
   }
 
   /**
+   * @description Updates a single record without pre-checks, via the configured DML implementation.
+   * @param obj The SObject to update.
+   */
+  public static void updateAsSystem(SObject obj) {
+    systemDmlOperations.dmlUpdate(new List<SObject>{ obj });
+  }
+
+  /**
+   * @description Upserts a single record without pre-checks, via the configured DML implementation.
+   * @param obj The SObject to upsert.
+   */
+  public static void upsertAsSystem(SObject obj) {
+    systemDmlOperations.dmlUpsert(new List<SObject>{ obj });
+  }
+
+  /**
+   * @description Deletes a single record without pre-checks, via the configured DML implementation.
+   * @param obj The SObject to delete.
+   */
+  public static void deleteAsSystem(SObject obj) {
+    systemDmlOperations.dmlDelete(new List<SObject>{ obj });
+  }
+
+  /**
+   * @description Merges one record into a master record without pre-checks, via the configured DML implementation.
    * @param masterObj The master SObject.
    * @param mergeObj The SObject to merge into masterObj.
    */
   public static void mergeAsSystem(SObject masterObj, SObject mergeObj) {
-    dmlOperations.dmlMerge(masterObj, new List<SObject>{ mergeObj });
+    systemDmlOperations.dmlMerge(masterObj, new List<SObject>{ mergeObj });
   }
 
   // ─── AsSystem list overloads ──────────────────────────────────────────────
 
-  /** @param objList The list of SObjects to insert. */
+  /**
+   * @description Inserts a list of records without pre-checks, via the configured DML implementation.
+   * @param objList The list of SObjects to insert.
+   */
   public static void insertAsSystem(List<SObject> objList) {
-    dmlOperations.dmlInsert(objList);
-  }
-
-  /** @param objList The list of SObjects to update. */
-  public static void updateAsSystem(List<SObject> objList) {
-    dmlOperations.dmlUpdate(objList);
-  }
-
-  /** @param objList The list of SObjects to upsert. */
-  public static void upsertAsSystem(List<SObject> objList) {
-    dmlOperations.dmlUpsert(objList);
-  }
-
-  /** @param objList The list of SObjects to delete. */
-  public static void deleteAsSystem(List<SObject> objList) {
-    dmlOperations.dmlDelete(objList);
+    systemDmlOperations.dmlInsert(objList);
   }
 
   /**
+   * @description Updates a list of records without pre-checks, via the configured DML implementation.
+   * @param objList The list of SObjects to update.
+   */
+  public static void updateAsSystem(List<SObject> objList) {
+    systemDmlOperations.dmlUpdate(objList);
+  }
+
+  /**
+   * @description Upserts a list of records without pre-checks, via the configured DML implementation.
+   * @param objList The list of SObjects to upsert.
+   */
+  public static void upsertAsSystem(List<SObject> objList) {
+    systemDmlOperations.dmlUpsert(objList);
+  }
+
+  /**
+   * @description Deletes a list of records without pre-checks, via the configured DML implementation.
+   * @param objList The list of SObjects to delete.
+   */
+  public static void deleteAsSystem(List<SObject> objList) {
+    systemDmlOperations.dmlDelete(objList);
+  }
+
+  /**
+   * @description Merges a list of records into a master record without pre-checks, via the configured DML implementation.
    * @param masterObj The master SObject.
    * @param mergeList The list of SObjects to merge into masterObj.
    */
   public static void mergeAsSystem(SObject masterObj, List<SObject> mergeList) {
-    dmlOperations.dmlMerge(masterObj, mergeList);
+    systemDmlOperations.dmlMerge(masterObj, mergeList);
   }
 
   // ─── Custom exception hierarchy ───────────────────────────────────────────
@@ -191,6 +255,7 @@ public inherited sharing class DMLManager {
   /** @description Thrown when the running user lacks CRUD permission for the requested operation. */
   public class CRUDException extends DMLManagerException {
     /**
+     * @description Builds the exception message from the denied operation and object type.
      * @param objType The SObjectType that triggered the violation.
      * @param op The operation that was denied.
      */
@@ -206,6 +271,7 @@ public inherited sharing class DMLManager {
     public SObjectField field { get; private set; }
 
     /**
+     * @description Builds the exception message from the denied operation, object type, and field.
      * @param objType The SObjectType that triggered the violation.
      * @param field The restricted field.
      * @param op The operation that was denied.
@@ -230,51 +296,100 @@ public inherited sharing class DMLManager {
   }
 
   /**
+   * @description Swaps the live DML implementation for an injected one.
    * @param dmlImplementation The implementation to inject (e.g. a mock for tests).
    */
   public static void setDMLImplementation(IDML dmlImplementation) {
     dmlOperations = dmlImplementation;
+    systemDmlOperations = dmlImplementation;
   }
 
   /**
-   * @description Live implementation that delegates to the platform Database methods
-   *              with AccessLevel.USER_MODE so CRUD/FLS are enforced at the DML site.
+   * @description Live implementation that delegates to the platform Database methods at a
+   *              per-instance AccessLevel — USER_MODE by default, so CRUD/FLS are enforced
+   *              at the DML site; the AsSystem statics hold a SYSTEM_MODE instance.
    *              `inherited sharing` mirrors the containing class — record visibility
    *              follows the caller's sharing context.
    */
   @SuppressWarnings('PMD.ApexCRUDViolation') // CRUD/FLS is verified before reaching these methods
   public inherited sharing virtual class SimpleDML implements IDML {
+    private final AccessLevel dmlAccessLevel;
+
+    /** @description Builds the default implementation, enforcing USER_MODE at every DML site. */
+    public SimpleDML() {
+      this(AccessLevel.USER_MODE);
+    }
+
+    /**
+     * @description Builds an implementation pinned to the given access level. The AsSystem
+     *              statics hold a SYSTEM_MODE instance; everything else defaults to USER_MODE.
+     * @param dmlAccessLevel Access level applied to every verb on this instance.
+     */
+    public SimpleDML(AccessLevel dmlAccessLevel) {
+      this.dmlAccessLevel = dmlAccessLevel;
+    }
+
+    /**
+     * @description Inserts the records at the configured access level.
+     * @param objList The records to insert.
+     */
     public virtual void dmlInsert(List<SObject> objList) {
       Logger.debug('Inserting ' + JSON.serializePretty(objList), 'DMLManager', 'dmlInsert');
-      Database.insert(objList, AccessLevel.USER_MODE);
+      Database.insert(objList, dmlAccessLevel);
     }
 
+    /**
+     * @description Updates the records at the configured access level.
+     * @param objList The records to update.
+     */
     public virtual void dmlUpdate(List<SObject> objList) {
       Logger.debug('Updating ' + JSON.serializePretty(objList), 'DMLManager', 'dmlUpdate');
-      Database.update(objList, AccessLevel.USER_MODE);
+      Database.update(objList, dmlAccessLevel);
     }
 
+    /**
+     * @description Deletes the records at the configured access level.
+     * @param objList The records to delete.
+     */
     public virtual void dmlDelete(List<SObject> objList) {
       Logger.debug('Deleting ' + JSON.serializePretty(objList), 'DMLManager', 'dmlDelete');
-      Database.delete(objList, AccessLevel.USER_MODE);
+      Database.delete(objList, dmlAccessLevel);
     }
 
+    /**
+     * @description Merges the records into the master record at the configured access level.
+     * @param masterRecord The record that survives the merge.
+     * @param objList The records to merge into masterRecord.
+     */
     public virtual void dmlMerge(SObject masterRecord, List<SObject> objList) {
-      // Database.merge does not accept AccessLevel; sharing is governed by the class modifier.
-      Database.merge(masterRecord, objList);
+      Logger.debug(
+        'Merging ' +
+          JSON.serializePretty(objList) +
+          ' into ' +
+          JSON.serializePretty(masterRecord),
+        'DMLManager',
+        'dmlMerge'
+      );
+      Database.merge(masterRecord, objList, dmlAccessLevel);
     }
 
+    /**
+     * @description Upserts the records at the configured access level.
+     * @param objList The records to upsert.
+     */
     public virtual void dmlUpsert(List<SObject> objList) {
       Logger.debug('Upserting ' + JSON.serializePretty(objList), 'DMLManager', 'dmlUpsert');
-      Database.upsert(objList, AccessLevel.USER_MODE);
+      Database.upsert(objList, dmlAccessLevel);
     }
   }
 
   // ─── Internal permission-checking helpers ─────────────────────────────────
 
   /**
+   * @description Verifies the running user holds the CRUD permission each SObjectType needs for the operation.
    * @param objTypeList Set of SObjectTypes whose CRUD will be verified.
    * @param dmlOperation The operation being attempted.
+   * @throws CRUDException when the running user lacks the required CRUD permission on any listed type.
    */
   public static void checkCRUDPermission(
     Set<SObjectType> objTypeList,
@@ -337,13 +452,13 @@ public inherited sharing class DMLManager {
 
   private static void dispatchDML(List<SObject> objList, Operation dmlOperation) {
     if (dmlOperation == Operation.OP_INSERT) {
-      insertAsSystem(objList);
+      dmlOperations.dmlInsert(objList);
     } else if (dmlOperation == Operation.OP_UPDATE) {
-      updateAsSystem(objList);
+      dmlOperations.dmlUpdate(objList);
     } else if (dmlOperation == Operation.OP_UPSERT) {
-      upsertAsSystem(objList);
+      dmlOperations.dmlUpsert(objList);
     } else if (dmlOperation == Operation.OP_DELETE) {
-      deleteAsSystem(objList);
+      dmlOperations.dmlDelete(objList);
     }
   }
 
@@ -352,6 +467,6 @@ public inherited sharing class DMLManager {
     List<SObject> mergeList
   ) {
     DMLHelper.checkCRUDForMerge(masterObj, mergeList);
-    mergeAsSystem(masterObj, mergeList);
+    dmlOperations.dmlMerge(masterObj, mergeList);
   }
 }

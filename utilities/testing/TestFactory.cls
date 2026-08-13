@@ -6,6 +6,7 @@
  * @author David Wood
  * @since December 2020
  * @last May 2026 — conformance refactor: sharing modifier, SYSTEM_MODE DML, exception base, header normalisation
+ * @last August 2026 — createTestUser permission sets injectable via testUserPermissionSets; duplicate record-type helper removed (Utilities keeps the canonical one)
  */
 @IsTest
 @SuppressWarnings(
@@ -13,6 +14,15 @@
 )
 public without sharing class TestFactory {
   private static Integer segment = 1;
+
+  // Permission sets createTestUser() assigns to the default test user.
+  // Consumer orgs override this list before calling the factory; the default
+  // matches the permission sets this library ships.
+  @TestVisible
+  static List<String> testUserPermissionSets = new List<String>{
+    'BasePermissionsApex',
+    TestFactoryDefaults.TEST_USER_PERMISSION
+  };
 
   // When creating a list of SObjects we need a unique name field per record.
   // Objects without a standard Name field are mapped here.
@@ -28,6 +38,7 @@ public without sharing class TestFactory {
   // ── createSObject overloads ──────────────────────────────────────────────
 
   /**
+   * @description Applies the auto-discovered TestFactoryDefaults for the SObject's type, when one exists.
    * @param sObj SObject instance to populate with defaults.
    * @return `SObject`
    */
@@ -43,6 +54,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Applies auto-discovered defaults and optionally inserts the record.
    * @param sObj     SObject instance to populate.
    * @param doInsert When true, inserts the record in SYSTEM_MODE.
    * @return `SObject`
@@ -56,10 +68,11 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Applies the named defaults class to the record.
    * @param sObj             SObject instance to populate.
    * @param defaultClassName Fully-qualified inner-class name (e.g. 'TestFactoryDefaults.AccountDefaults').
    * @return `SObject`
-   * @exception TestFactoryException when defaultClassName is not a resolvable type.
+   * @throws TestFactoryException when defaultClassName is not a resolvable type.
    */
   public static SObject createSObject(SObject sObj, String defaultClassName) {
     Type t = Type.forName(defaultClassName);
@@ -72,6 +85,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Applies the named defaults class and optionally inserts the record.
    * @param sObj             SObject instance to populate.
    * @param defaultClassName Fully-qualified inner-class name.
    * @param doInsert         When true, inserts the record in SYSTEM_MODE.
@@ -92,6 +106,7 @@ public without sharing class TestFactory {
   // ── createSObjectList overloads ─────────────────────────────────────────
 
   /**
+   * @description Builds a list of clones of the template with auto-discovered defaults applied.
    * @param sObj            Template SObject.
    * @param numberOfObjects Number of clones to build.
    * @return `SObject[]`
@@ -104,6 +119,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Builds a list of clones with auto-discovered defaults and optionally bulk-inserts it.
    * @param sObj            Template SObject.
    * @param numberOfObjects Number of clones to build.
    * @param doInsert        When true, bulk-inserts the list in SYSTEM_MODE.
@@ -122,6 +138,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Builds a list of clones with the named defaults applied, uniquifying each record's name field.
    * @param sObj            Template SObject.
    * @param numberOfObjects Number of clones to build.
    * @param defaultClassName Fully-qualified inner-class name (optional, nullable).
@@ -163,6 +180,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Builds a list of clones with the named defaults applied and optionally bulk-inserts it.
    * @param sObj            Template SObject.
    * @param numberOfObjects Number of clones to build.
    * @param defaultClassName Fully-qualified inner-class name (optional, nullable).
@@ -190,6 +208,7 @@ public without sharing class TestFactory {
   // ── User helpers ─────────────────────────────────────────────────────────
 
   /**
+   * @description Builds a test User on the given profile, inserting under an admin context when requested.
    * @param profileId Profile Id for the new user.
    * @param doInsert  When true, inserts the user wrapped in System.runAs(admin).
    * @return `User`
@@ -218,6 +237,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Builds a test User on the named profile.
    * @param doInsert    When true, inserts the user.
    * @param profileName Name of the profile to assign.
    * @return `User`
@@ -233,19 +253,23 @@ public without sharing class TestFactory {
   }
 
   /**
-   * @return The default test user with BasePermissionsApex and TEST_USER_PERMISSION assigned.
+   * @description Creates and inserts the default test user, assigning every
+   *              permission set registered in testUserPermissionSets.
+   * @return The default test user with the registered permission sets assigned.
    */
   public static User createTestUser() {
     User u = createMinAccessUser(false);
     System.runAs(getAdminUser()) {
       Database.insert(u, AccessLevel.SYSTEM_MODE);
-      assignPermSetToUser(u, 'BasePermissionsApex');
-      assignPermSetToUser(u, TestFactoryDefaults.TEST_USER_PERMISSION);
+      for (String permissionSetName : testUserPermissionSets) {
+        assignPermSetToUser(u, permissionSetName);
+      }
     }
     return u;
   }
 
   /**
+   * @description Creates a minimum-access user and assigns the named permission set.
    * @param permissionSetName Permission set to assign after creating the user.
    * @return The created test user.
    */
@@ -256,6 +280,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Builds a test User on the Minimum Access - Salesforce profile.
    * @param doInsert When true, inserts the user.
    * @return `User` with Minimum Access - Salesforce profile.
    */
@@ -271,6 +296,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Builds a test User on the Marketing User profile.
    * @param doInsert When true, inserts the user.
    * @return `User` with Marketing User profile.
    */
@@ -287,6 +313,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Assigns the named permission set to the given user in SYSTEM_MODE.
    * @param usr         User to assign the permission set to.
    * @param permSetName Name of the permission set.
    */
@@ -309,6 +336,7 @@ public without sharing class TestFactory {
   // ── Query helpers ────────────────────────────────────────────────────────
 
   /**
+   * @description Fetches the most recent factory-created user holding the named permission set.
    * @param permissionName Permission set name to match.
    * @return Most recently created User with that permission set and LastName = 'last'.
    */
@@ -330,6 +358,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Fetches the most recent factory-created default test user.
    * @return Most recently created test user matching TestFactoryDefaults.TEST_USER_PERMISSION.
    */
   public static User getCreatedTestUser() {
@@ -337,6 +366,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Fetches the most recent minimum-access user in the org.
    * @return Most recently created Minimum Access - Salesforce test user.
    */
   public static User getMinAccessUser() {
@@ -351,6 +381,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Fetches the most recent active user on the named profile.
    * @param profileName Profile name to match.
    * @return Most recently created active User with that profile.
    */
@@ -366,19 +397,7 @@ public without sharing class TestFactory {
   }
 
   /**
-   * @param sObjectName API name of the SObject.
-   * @return Map of record type name to RecordTypeInfo.
-   */
-  public static Map<String, Schema.RecordTypeInfo> getRecordTypes(
-    String sObjectName
-  ) {
-    Schema.DescribeSObjectResult describeResult = Schema.getGlobalDescribe()
-      .get(sObjectName)
-      .getDescribe();
-    return describeResult.getRecordTypeInfosByName();
-  }
-
-  /**
+   * @description Resolves the PricebookEntry linking the given pricebook and product.
    * @param pricebookId Pricebook Id.
    * @param productId   Product2 Id.
    * @return The matching PricebookEntry Id.
@@ -395,6 +414,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Generates a well-formed fake record Id without any DML.
    * @param sot SObjectType to generate a fake Id for.
    * @return A fake 18-char Id string safe for in-memory test assertions.
    */
@@ -406,6 +426,7 @@ public without sharing class TestFactory {
   }
 
   /**
+   * @description Blanks each record's Name so negative-path tests can force validation failures.
    * @param incoming List of SObjects to invalidate (sets Name to empty string).
    * @return `List<SObject>` — same list, mutated.
    */

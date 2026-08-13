@@ -4,7 +4,7 @@ This file governs how things are named: Apex classes, methods, and variables; cu
 
 ## 1. Apex class names carry their archetype as a suffix
 
-**Rule.** Every Apex class whose role matches a layering archetype ends with that archetype's suffix: `*Service`, `*Selector`, `*TriggerHandler`, `*Batch`, `*Queueable`, `*Scheduler`, `*Controller`, `*Test`. Test classes are named `<ClassUnderTest>Test`, no exceptions. A class with no archetype — a shared utility like [`Utilities.cls`](../utilities/general/Utilities.cls) or [`Logger.cls`](../utilities/logging/Logger.cls) — carries no suffix rather than a misleading one.
+**Rule.** Every Apex class whose role matches a layering archetype ends with that archetype's suffix: `*Service`, `*Selector`, `*TriggerHandler`, `*Batch`, `*Queueable`, `*Scheduler`, `*Controller`, `*Test`. Test classes — classes containing test methods — are named `<ClassUnderTest>Test`, no exceptions. The `*Test` suffix is scoped to test *methods*, not to the `@IsTest` annotation: `@IsTest`-annotated test **infrastructure** — factories, stubs, mocks that ship no test methods, like [`TestFactory.cls`](../utilities/testing/TestFactory.cls), [`TestDouble.cls`](../utilities/testing/TestDouble.cls), or [`DMLManagerErrorStub.cls`](../utilities/dml/DMLManagerErrorStub.cls) — carries a descriptive suffix instead (`*Factory`, `*Stub`, `*Double`, `Mock*`), because a stub wearing `*Test` promises test methods it doesn't have, to readers and to test-discovery tooling alike. A class with no archetype — a shared utility like [`Utilities.cls`](../utilities/general/Utilities.cls) or [`Logger.cls`](../utilities/logging/Logger.cls) — carries no suffix rather than a misleading one.
 
 **Why.** The suffix is the architecture, read off the name: a reviewer knows the class's allowed dependencies before opening it, because [architecture-layering.md](./architecture-layering.md) binds each archetype to a dependency contract (selectors never call services; services never inline SOQL). fflib prescribes exactly this for the Service and Selector layers, and it makes the codebase enumerable — `grep -rl "class \w*Selector"` is a complete inventory of every class allowed to own SOQL. The cron-entry archetype is named for what it is on this platform — `*Scheduler`, not `*Schedulable` — matching the shipped [`LogCleanupScheduler.cls`](../utilities/logging/LogCleanUp/LogCleanupScheduler.cls): `Schedulable` is the interface it implements, not the noun a reviewer is looking for in a file listing.
 
@@ -82,8 +82,13 @@ Custom permissions follow the `Can_<Action>` grammar owned by [permissions.md §
              PMD's Apex ruleset never parses, and which use the opposite
              grammar (underscore-separated) by design. -->
         <property name="classPattern" value="[A-Z][a-zA-Z0-9]*" />
-        <!-- §1 compiled: every test class ends in Test. -->
-        <property name="testClassPattern" value="[A-Z][a-zA-Z0-9]*Test" />
+        <!-- §1 compiled: every class containing test methods ends in Test.
+             PMD keys "test class" off the @IsTest annotation, which also
+             catches §1's test infrastructure (factories, stubs, mocks,
+             doubles) that ships no test methods — so the pattern admits
+             those descriptive suffixes alongside *Test. Whether a class
+             actually contains test methods stays a review check. -->
+        <property name="testClassPattern" value="[A-Z][a-zA-Z0-9]*(Test|Factory|FactoryDefaults|Stub|Double)|Mock[A-Z][a-zA-Z0-9]*" />
     </properties>
 </rule>
 <rule ref="category/apex/codestyle.xml/MethodNamingConventions" />

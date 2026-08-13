@@ -1,7 +1,10 @@
 /**
  * @description Resolves a mixed list of plain email addresses and Public Group developer names
- *              into a flat set of member email addresses, following nested groups up to
- *              MAX_RECURSION_DEPTH levels deep.
+ *              into a flat set of member email addresses. Traversal covers the directly-addressed
+ *              groups plus up to MAX_RECURSION_DEPTH levels of nested groups beneath them (six
+ *              group levels in total); memberships nested deeper than that are ignored, not an error.
+ *              Inputs that resolve to no group are ignored the same way — resolution is tolerant
+ *              of junk entries by design.
  *
  *              Sharing: declared `without sharing` intentionally. Group membership resolution
  *              must succeed regardless of the calling user's record-level visibility — a sender
@@ -13,18 +16,19 @@
  * @author David Wood
  * @since July 2024
  * @last May 2026 — conformance refactor
+ * @last August 2026 — removed the never-thrown module exception; recursion-depth contract stated precisely
  */
 public without sharing class GroupMemberEmailRetriever {
-  // Maximum nesting depth for recursive group traversal.
+  // Nested groups are followed up to this many levels below the directly-addressed
+  // groups; the guard in retrieveEmailsFromGroups stops the level after this depth.
   private static final Integer MAX_RECURSION_DEPTH = 5;
 
   private static Set<Id> processedGroupIds = new Set<Id>();
   private static Set<Id> userIds = new Set<Id>();
 
-  /** Custom exception for this class. */
-  public class GroupMemberEmailRetrieverException extends UtilitiesModuleException {}
-
   /**
+   * @description Splits the inputs into direct addresses (anything containing '@') and group
+   *              developer names, then resolves group membership into member email addresses.
    * @param inputs List of strings containing email addresses or group developer names.
    * @return Set<String> Unique email addresses collected from direct entries and group members.
    */
@@ -95,7 +99,8 @@ public without sharing class GroupMemberEmailRetriever {
 
   /**
    * @param groupIds Group IDs to process at this recursion level.
-   * @param currentDepth Current recursion depth.
+   * @param currentDepth Current recursion depth — 0 for the directly-addressed groups, so the
+   *        guard admits depths 0 through MAX_RECURSION_DEPTH (six group levels in total).
    */
   private static void retrieveEmailsFromGroups(
     Set<Id> groupIds,

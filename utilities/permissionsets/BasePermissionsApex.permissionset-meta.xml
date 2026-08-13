@@ -22,4 +22,18 @@
     <classAccesses><apexClass>Utilities</apexClass><enabled>true</enabled></classAccesses>
     <classAccesses><apexClass>UtilitiesHelper</apexClass><enabled>true</enabled></classAccesses>
     <classAccesses><apexClass>UtilitiesModuleException</apexClass><enabled>true</enabled></classAccesses>
+    <fieldPermissions><editable>true</editable><field>Debug_Log__c.Class_Name__c</field><readable>true</readable></fieldPermissions>
+    <fieldPermissions><editable>true</editable><field>Debug_Log__c.Do_Not_Delete__c</field><readable>true</readable></fieldPermissions>
+    <fieldPermissions><editable>true</editable><field>Debug_Log__c.Log_Level__c</field><readable>true</readable></fieldPermissions>
+    <fieldPermissions><editable>true</editable><field>Debug_Log__c.Message__c</field><readable>true</readable></fieldPermissions>
+    <fieldPermissions><editable>true</editable><field>Debug_Log__c.Method_Name__c</field><readable>true</readable></fieldPermissions>
+    <objectPermissions>
+        <allowCreate>true</allowCreate>
+        <allowDelete>false</allowDelete>
+        <allowEdit>false</allowEdit>
+        <allowRead>true</allowRead>
+        <modifyAllRecords>false</modifyAllRecords>
+        <object>Debug_Log__c</object>
+        <viewAllRecords>false</viewAllRecords>
+    </objectPermissions>
 </PermissionSet>

@@ -26,6 +26,7 @@
  * @since July 2024
  * @last May 2026 — conformance refactor: sharing modifier, header, exception hierarchy,
  *                  run() decomposition, @TestVisible capitalisation, clearCache() stub.
+ * @last August 2026 — hook-contract ApexDoc; static initializer delegates to clearCache().
  */
 public virtual without sharing class TriggerHandler {
   // Static loop-count and bypass registries.
@@ -42,8 +43,9 @@ public virtual without sharing class TriggerHandler {
   private Boolean isTriggerExecuting;
 
   static {
-    loopCountMap = new Map<String, LoopCount>();
-    bypassedHandlers = new Set<String>();
+    // Delegate to clearCache() so class-load initialization and test resets
+    // can never drift apart — one method owns the empty-state definition.
+    clearCache();
   }
 
   /**
@@ -294,42 +296,85 @@ public virtual without sharing class TriggerHandler {
   }
 
   // ─── Virtual hook methods (override in subclasses) ────────────────────────────
+  // These eight hooks are the framework's extension contract: subclasses override
+  // only the events they care about; every default is a safe no-op.
 
+  /**
+   * @description Fires on `before insert`. Override to validate or default field
+   *              values on `Trigger.new` — records are writable and not yet saved.
+   *              Default is a no-op.
+   */
   @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void beforeInsert() {
   }
 
+  /**
+   * @description Fires on `before update`. Override to validate or adjust
+   *              `Trigger.new` against `Trigger.oldMap` before the save completes.
+   *              Default is a no-op.
+   */
   @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void beforeUpdate() {
   }
 
+  /**
+   * @description Fires on `before delete`. Override to block a delete or capture
+   *              state from `Trigger.old` while the records still exist.
+   *              Default is a no-op.
+   */
   @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void beforeDelete() {
   }
 
+  /**
+   * @description Fires on `after insert`. Override for work that needs the new
+   *              records' Ids — related-record creation, async handoff. `Trigger.new`
+   *              is read-only here. Default is a no-op.
+   */
   @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void afterInsert() {
   }
 
+  /**
+   * @description Fires on `after update`. Override for side effects driven by
+   *              field transitions (compare `Trigger.new` to `Trigger.oldMap`).
+   *              Records are read-only here. Default is a no-op.
+   */
   @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void afterUpdate() {
   }
 
+  /**
+   * @description Fires on `after delete`. Override for cascade cleanup or audit
+   *              work keyed off `Trigger.old` after the delete commits.
+   *              Default is a no-op.
+   */
   @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void afterDelete() {
   }
 
+  /**
+   * @description Fires on `after undelete`. Override to restore related state for
+   *              records recovered from the Recycle Bin (`Trigger.new`).
+   *              Default is a no-op.
+   */
   @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void afterUndelete() {
   }
 
+  /**
+   * @description Runs after every dispatched hook, regardless of context — the
+   *              handler's per-run epilogue for cross-context concerns such as
+   *              flushing collected DML or emitting logs. Not called when the run
+   *              is bypassed or fails validation. Default is a no-op.
+   */
   @TestVisible
   @SuppressWarnings('PMD.EmptyStatementBlock')
   protected virtual void andFinally() {

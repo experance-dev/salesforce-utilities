@@ -56,7 +56,7 @@ public with sharing class BillingApiService extends RestClient {
 
 **Why.** The default 10 seconds (maximum 120) is arbitrary relative to your transaction, and the cumulative 120-second callout budget per transaction is a shared resource: one slow upstream riding the default can consume the time three other callouts in the same transaction needed.
 
-TODO: `RestClient.makeApiCall` does not currently set `HttpRequest.setTimeout`, so its requests ride the platform default. Extend the omnibus signature with a timeout parameter (plus a protected default subclasses override); until then, a service with a real latency budget must document that gap in its class header rather than silently accepting the default.
+[`RestClient.cls`](../utilities/rest/RestClient.cls) sets a 120-second default and exposes `withTimeout` for per-call budgets — override the default in any synchronous context.
 
 ### 3.2 Retry only recoverable failures, with backoff and jitter — off the synchronous path
 
