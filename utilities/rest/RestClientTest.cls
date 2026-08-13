@@ -4,7 +4,7 @@
  * @see RestClient
  * @author David Wood
  * @since 2024-03-16
- * @last May 2026 — Wave 6 conformance
+ * @last May 2026 — conformance refactor
  */
 @isTest
 private without sharing class RestClientTest {

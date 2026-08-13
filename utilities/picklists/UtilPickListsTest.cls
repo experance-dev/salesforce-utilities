@@ -3,9 +3,9 @@
  * covering both positive scenarios and edge cases.
  * @group Picklists
  * @see UtilPickLists
- * @author Zelis
+ * @author David Wood
  * @since 2024
- * @last May 2026 — Wave 6 conformance
+ * @last May 2026 — conformance refactor
  */
 @isTest
 public without sharing class UtilPickListsTest {

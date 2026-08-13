@@ -4,7 +4,7 @@
  *
  * @group Strings
  * @since August 2024
- * @last May 2026 — Wave 5 conformance
+ * @last May 2026 — conformance refactor
  */
 public virtual without sharing class StringBuilder {
   protected String stringValue;

@@ -12,7 +12,7 @@
  * @group Email
  * @author David Wood
  * @since July 2024
- * @last May 2026 — Wave 5 conformance
+ * @last May 2026 — conformance refactor
  */
 public without sharing class GroupMemberEmailRetriever {
   // Maximum nesting depth for recursive group traversal.

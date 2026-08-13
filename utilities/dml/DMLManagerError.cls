@@ -5,7 +5,7 @@
  * @group DML
  * @author David Wood
  * @since September 2024
- * @last May 2026 — Wave 2 conformance refactor
+ * @last May 2026 — conformance refactor
  */
 @isTest
 public with sharing class DMLManagerError extends DMLManager.SimpleDML {

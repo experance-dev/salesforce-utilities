@@ -4,7 +4,7 @@
  *              across pricing operations.
  * @group Pricing
  * @since June 2024
- * @last May 2026 — Wave 5 conformance: inherited sharing, USER_MODE SOQL,
+ * @last May 2026 — conformance refactor: inherited sharing, USER_MODE SOQL,
  *                  Test.isRunningTest() removed (Option A @TestVisible setter)
  */
 public inherited sharing class PricebookUtil {

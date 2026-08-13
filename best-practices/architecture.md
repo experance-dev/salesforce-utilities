@@ -1,12 +1,12 @@
 # Architecture & patterns
 
-> This file is **proposed** — the seed guidelines were class-level rules, not architectural. Review and codify before treating as canon.
+> Ratified by David Wood 2026-05-12. The conventions below are canon for all Apex work in this codebase.
 
 ## Canonical guidance from existing standards
 
 - Single-responsibility per method/class. Decompose anything over the complexity budget (see [apex.md](apex.md)).
 - All DML through [`DMLManager`](../utilities/dml/DMLManager.cls) using `xxxAsUser` methods.
-- Cross-transaction state in session platform cache, never static class variables.
+- State that must outlive the current transaction belongs in session platform cache, never static class variables. State scoped to the current transaction (a trigger recursion guard, a bypass flag) is exactly what static class variables are for — see [apex.md](apex.md#caching).
 
 ---
 

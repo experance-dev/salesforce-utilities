@@ -1,12 +1,12 @@
 /**
  * @description Creates and queues HttpResponse instances for use with Test.setMock.
  *              Supports single-response and ordered multi-response scenarios.
- *              Wave 6 test authors should standardize on this factory instead of
+ *              New test classes should standardize on this factory instead of
  *              inlining anonymous HttpCalloutMock implementations per test.
  * @group Testing
  * @author David Wood
  * @since March 2024
- * @last May 2026 — Wave 2 conformance
+ * @last May 2026 — conformance refactor
  */
 @isTest
 public without sharing class HttpCalloutMockFactory implements HttpCalloutMock {

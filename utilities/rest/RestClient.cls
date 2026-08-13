@@ -13,7 +13,7 @@
  * @group REST
  * @author David Wood
  * @since June 2024
- * @last May 2026 — Wave 5 conformance: added `with sharing`, RestClientException,
+ * @last May 2026 — conformance refactor: added `with sharing`, RestClientException,
  *                  Logger.logException wrapping, stripped method-level @description,
  *                  removed dead commented-out code.
  */
@@ -180,6 +180,10 @@ public with sharing virtual class RestClient {
       return http.send(apiRequest);
     } catch (Exception e) {
       Logger.logException(e, 'RestClient', 'makeApiCall');
+      // TODO: this concatenates e.getMessage() + e.getStackTraceString() into the
+      // rethrown message — the anti-pattern apex.md's error-handling section now
+      // bans. Migrate to a sanitized message (correlation ID + e.getTypeName() only)
+      // once callers of RestClientException are audited for the message-shape change.
       throw new RestClientException(
         'Callout failed [' +
           this.namedCredentialName +

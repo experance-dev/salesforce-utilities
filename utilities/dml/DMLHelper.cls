@@ -5,7 +5,7 @@
  * @group DML
  * @author David Wood
  * @since May 2024
- * @last May 2026 — Wave 2 USER_MODE migration; conformance refactor
+ * @last May 2026 — USER_MODE migration; conformance refactor
  * @see DMLManager
  */
 @SuppressWarnings('PMD.ExcessivePublicCount')

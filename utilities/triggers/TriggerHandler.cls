@@ -9,7 +9,7 @@
  *              Using `with sharing` here would incorrectly restrict the dispatcher
  *              when invoked from a system-context trigger.
  *
- *              Platform-cache migration (DEFERRED — Wave 4):
+ *              Platform-cache migration (deferred):
  *              `loopCountMap` and `bypassedHandlers` are static class variables.
  *              Per apex.md, cross-transaction state belongs in session platform cache.
  *              Migration was deferred because: (1) no named cache partition is
@@ -22,9 +22,9 @@
  *              apex.md. When a cache partition is provisioned, migrate both fields
  *              and update clearCache() to flush the partition key instead.
  * @group Triggers
- * @author Kevin O'Hara / Zelis Engineering
+ * @author Kevin O'Hara / David Wood
  * @since July 2024
- * @last May 2026 — Wave 3 conformance: sharing modifier, header, exception hierarchy,
+ * @last May 2026 — conformance refactor: sharing modifier, header, exception hierarchy,
  *                  run() decomposition, @TestVisible capitalisation, clearCache() stub.
  */
 public virtual without sharing class TriggerHandler {
@@ -125,7 +125,7 @@ public virtual without sharing class TriggerHandler {
 
   /**
    * Resets static state between test methods.
-   * NOTE: When platform-cache migration lands (Wave 4), update this method to
+   * NOTE: TODO: when platform-cache migration lands, update this method to
    * also flush the relevant cache partition keys.
    */
   @TestVisible

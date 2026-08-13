@@ -1,6 +1,6 @@
 # Lightning Web Components
 
-> Most of this file is **proposed** — the seed guidelines didn't cover LWC beyond "use headless LWC actions for scheduling." Review and codify the items below before treating as canon.
+> Ratified by David Wood 2026-05-12. The conventions below are canon for all LWC work in this codebase.
 
 ## Canonical guidance from existing standards
 
@@ -45,7 +45,7 @@ get error() { return this.wiredRecords?.error; }
 ### Errors and toasts
 
 - User-facing errors via `lightning/platformShowToastEvent` with a user-friendly message. Never display raw exception text.
-- Log technical detail via [`Logger`](../utilities/logging/Logger.cls) on the Apex side; the LWC user-facing message is short and actionable.
+- Log technical detail via [`Logger`](../utilities/logging/Logger.cls) on the Apex side; the LWC user-facing message is short and tells the user what to do next.
 
 ### Platform events
 

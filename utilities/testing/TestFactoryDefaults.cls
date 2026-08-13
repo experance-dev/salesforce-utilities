@@ -5,7 +5,7 @@
  * @group Testing
  * @author David Wood
  * @since December 2020
- * @last May 2026 — Wave 2 conformance: sharing modifier, header normalisation, method-level ApexDoc stripped
+ * @last May 2026 — conformance refactor: sharing modifier, header normalisation, method-level ApexDoc stripped
  */
 @IsTest
 public without sharing class TestFactoryDefaults {

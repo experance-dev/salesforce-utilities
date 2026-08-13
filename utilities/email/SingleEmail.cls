@@ -10,7 +10,7 @@
  * @group   Email
  * @author  David Wood
  * @since   April 2024
- * @last    May 2026 — Wave 5 conformance: explicit sharing, Logger, SingleEmailException, header cleanup
+ * @last    May 2026 — conformance refactor: explicit sharing, Logger, SingleEmailException, header cleanup
  */
 public with sharing class SingleEmail {
   // ─── Inner exception ────────────────────────────────────────────────────────
