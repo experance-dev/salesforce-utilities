@@ -15,7 +15,6 @@
  * @since 2026-08-13
  * @last 2026-08-13 — initial persona-matrix scenario contract (design §4).
  */
-@IsTest
 public interface PersonaScenario {
   /**
    * @description Runs the scenario as the current persona. Invoked by the runner inside

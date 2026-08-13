@@ -16,6 +16,9 @@
  * @last 2026-08-13 — initial version: expectation model + Check seam for PersonaMatrix v1.
  */
 @IsTest
+// Analyzer suppression, disclosed in the v1.1.0 PR: evaluate()'s outcome-kind dispatch is a
+// flat decision table; splitting it would scatter the expectation semantics the spec keeps in one place.
+@SuppressWarnings('PMD.CyclomaticComplexity')
 public inherited sharing class PersonaOutcome {
   // Truncation length for rendering an unexpected return value inside a mismatch message —
   // enough to identify the value without flooding the capped ledger.

@@ -14,6 +14,9 @@
  * @last 2026-08-13 — initial version: per-persona actual-outcome carrier for PersonaMatrix v1.
  */
 @IsTest
+// Analyzer suppression, disclosed in the v1.1.0 PR: the constructor is the runner-built
+// result carrier's single full-state seam.
+@SuppressWarnings('PMD.ExcessiveParameterList')
 public inherited sharing class PersonaMatrixResult {
   // ── Execution facts — fixed at construction by the runner ────────────────
   private final String personaName;

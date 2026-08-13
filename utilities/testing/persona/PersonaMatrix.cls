@@ -21,6 +21,10 @@
  * @last 2026-08-13 — initial persona-matrix runner + provisioning per design Draft v3 (§6, §7).
  */
 @IsTest
+// Analyzer suppression, disclosed in the v1.1.0 PR: the runner deliberately keeps grammar,
+// provisioning, execution, and ledger in one cohesive class (same waiver shape as DMLManager);
+// class totals trip the budget through breadth of small methods, not nesting depth.
+@SuppressWarnings('PMD.CognitiveComplexity, PMD.CyclomaticComplexity')
 public without sharing class PersonaMatrix {
   // `without sharing` deliberately: provisioning and userFor(...) must resolve org state
   // (User, Profile, PermissionSet rows) deterministically no matter which context calls them —

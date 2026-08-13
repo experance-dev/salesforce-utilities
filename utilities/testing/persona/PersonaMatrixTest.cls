@@ -21,6 +21,12 @@
  * @last 2026-08-13 — initial §8 self-test table coverage per design Draft v3.
  */
 @IsTest
+// Analyzer suppressions, disclosed in the v1.1.0 PR: every test method executes persona
+// scenarios under PersonaMatrix's own System.runAs, which ApexUnitTestClassShouldHaveRunAs
+// cannot see; the row-visibility scenarios query without WHERE/LIMIT because the row count
+// under sharing IS the assertion; TrivialQueueable exists only to prove enqueue rejection
+// and never runs business logic; class-level cyclomatic total is 26 small methods, not depth.
+@SuppressWarnings('PMD.ApexUnitTestClassShouldHaveRunAs, PMD.CyclomaticComplexity, PMD.AvoidNonRestrictiveQueries, PMD.QueueableWithoutFinalizer')
 private inherited sharing class PersonaMatrixTest {
   // ── Constants ────────────────────────────────────────────────────────────
 

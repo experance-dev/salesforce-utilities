@@ -16,6 +16,9 @@
  * @last 2026-08-13 — initial persona-matrix value object (design §4, §6.1, §7).
  */
 @IsTest
+// Analyzer suppression, disclosed in the v1.1.0 PR: the constructor is the immutable value
+// object's single full-state seam, consumed only by PersonaBuilder.build().
+@SuppressWarnings('PMD.ExcessiveParameterList')
 public inherited sharing class Persona {
   /**
    * @description Profile applied when a builder never calls .profile(...). A
