@@ -1,15 +1,22 @@
 /**
  * @description Tests for `Logger` — covers message formatting through the
- *              `formatLogMessage` seam, the `printLogs` verbosity gate, and the
- *              `Debug_Log__c` durable-sink contract: error-severity entries
- *              persist exactly one record, lower severities persist nothing.
+ *              `formatLogMessage` seam, the `printLogs` verbosity gate, the
+ *              `Debug_Log__c` durable-sink contract (error-severity entries
+ *              persist exactly one record, lower severities persist nothing),
+ *              and the `API_Exception_Log__c` sink: both `logApiException`
+ *              overloads persist, allowlist redaction, null-exception safety,
+ *              swallow-without-rethrow on persistence failure, and the shipped
+ *              retention CMDT row.
  * @group Logger
  * @see Logger
+ * @see LogCleanupContext
  * @author David Wood
  * @since August 2024
  * @last May 2026 — conformance refactor
  * @last August 2026 — rewritten with real assertions against the formatting seam
  *                      and the Debug_Log__c durable sink
+ * @last 2026-08-13 — API-exception sink coverage: overload persistence, allowlist
+ *                     scrub, null-exception + failure paths, retention CMDT row
  */
 @IsTest
 private without sharing class LoggerTest {
@@ -253,5 +260,274 @@ private without sharing class LoggerTest {
       result,
       'printLogs must resolve to a non-null default whether or not the org ships a Log_Setting__mdt record.'
     );
+  }
+
+  @IsTest
+  static void testLogApiExceptionWithExceptionPersistsOneRow() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      Id fakeAccountId = Utilities.getFakeId(Account.SObjectType);
+
+      Test.startTest();
+      try {
+        Integer unused = 1 / 0; // NOPMD — intentional exception source
+      } catch (Exception e) {
+        Logger.logApiException(
+          'Jira',
+          'createIssue',
+          'Account',
+          fakeAccountId,
+          'txn-001',
+          e
+        );
+      }
+      Test.stopTest();
+
+      List<API_Exception_Log__c> persisted = [
+        SELECT
+          API_Name__c,
+          Operation__c,
+          Source_Object__c,
+          Source_Record_Id__c,
+          Transaction_Id__c,
+          Severity__c,
+          Message__c,
+          Exception_Type__c,
+          Stack_Trace__c,
+          Do_Not_Delete__c
+        FROM API_Exception_Log__c
+      ];
+      Assert.areEqual(
+        1,
+        persisted.size(),
+        'The Exception overload must persist exactly one API_Exception_Log__c row.'
+      );
+      Assert.areEqual(
+        'Jira',
+        persisted[0].API_Name__c,
+        'The integration name must land in API_Name__c.'
+      );
+      Assert.areEqual(
+        'createIssue',
+        persisted[0].Operation__c,
+        'The failing operation must land in Operation__c.'
+      );
+      Assert.areEqual(
+        'Account',
+        persisted[0].Source_Object__c,
+        'The source SObject API name must land in Source_Object__c.'
+      );
+      Assert.areEqual(
+        String.valueOf(fakeAccountId),
+        persisted[0].Source_Record_Id__c,
+        'The source record Id must persist as its 18-character string form.'
+      );
+      Assert.areEqual(
+        'txn-001',
+        persisted[0].Transaction_Id__c,
+        'The correlation id must land in Transaction_Id__c.'
+      );
+      Assert.areEqual(
+        'Error',
+        persisted[0].Severity__c,
+        'API exception rows persist at Error severity.'
+      );
+      Assert.areEqual(
+        'System.MathException',
+        persisted[0].Exception_Type__c,
+        'The exception type name must land in Exception_Type__c.'
+      );
+      Assert.isTrue(
+        persisted[0].Message__c.contains('Divide'),
+        'Identifier-shaped exception detail must survive the allowlist scrub: ' +
+          persisted[0].Message__c
+      );
+      Assert.isTrue(
+        persisted[0].Stack_Trace__c.contains('LoggerTest'),
+        'Stack frames are identifier-shaped and must survive the scrub: ' +
+          persisted[0].Stack_Trace__c
+      );
+      Assert.isFalse(
+        persisted[0].Do_Not_Delete__c,
+        'New API exception rows default to deletable — the retention opt-out is per-record and manual.'
+      );
+      Assert.areEqual(
+        0,
+        [SELECT COUNT() FROM Debug_Log__c],
+        'API exception rows have their own sink — the debug-log mirror must not double-persist to Debug_Log__c.'
+      );
+    }
+  }
+
+  @IsTest
+  static void testLogApiExceptionWithMessagePersistsAndScrubs() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      Test.startTest();
+      Logger.logApiException(
+        'Workday',
+        'syncWorker',
+        null,
+        null,
+        null,
+        'POST https://api.workday.example.com/v1/workers?ssn=123-45-6789&key=sk_live_x9 returned 401 for jane.doe@example.com'
+      );
+      Test.stopTest();
+
+      List<API_Exception_Log__c> persisted = [
+        SELECT Message__c, Exception_Type__c, Source_Object__c, Severity__c
+        FROM API_Exception_Log__c
+      ];
+      Assert.areEqual(
+        1,
+        persisted.size(),
+        'The message overload must persist exactly one API_Exception_Log__c row.'
+      );
+      String message = persisted[0].Message__c;
+      Assert.isFalse(
+        message.contains('jane.doe@example.com'),
+        'An email-like token must be redacted: ' + message
+      );
+      Assert.isFalse(
+        message.contains('123-45-6789'),
+        'Query-string payload must be stripped with the query string: ' +
+          message
+      );
+      Assert.isFalse(
+        message.contains('sk_live_x9'),
+        'Credential material riding the query string must never persist: ' +
+          message
+      );
+      Assert.isTrue(
+        message.contains('https://api.workday.example.com/v1/workers'),
+        'The endpoint host+path must survive for operational triage: ' + message
+      );
+      Assert.isTrue(
+        message.contains('401'),
+        'The HTTP status code must survive the scrub: ' + message
+      );
+      Assert.isTrue(
+        message.contains('[REDACTED]'),
+        'Redacted tokens must be visibly masked, not silently dropped: ' +
+          message
+      );
+      Assert.isNull(
+        persisted[0].Exception_Type__c,
+        'The non-exception overload persists no exception type.'
+      );
+      Assert.isNull(
+        persisted[0].Source_Object__c,
+        'Nullable context fields persist as null when the caller has none.'
+      );
+    }
+  }
+
+  @IsTest
+  static void testScrubAllowlistSeamAdmitsCustomTokenShape() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      String seeded = 'corr#A1B2 jane.doe@example.com';
+
+      String defaultScrub = Logger.scrubApiDiagnostic(seeded);
+      Assert.isFalse(
+        defaultScrub.contains('corr#A1B2'),
+        'A token shape outside the default allowlist must be redacted: ' +
+          defaultScrub
+      );
+
+      Logger.apiDiagnosticAllowlist.add('corr#[A-Za-z0-9]+');
+      String widenedScrub = Logger.scrubApiDiagnostic(seeded);
+      Assert.isTrue(
+        widenedScrub.contains('corr#A1B2'),
+        'The @TestVisible allowlist seam must admit a deliberately added token shape: ' +
+          widenedScrub
+      );
+      Assert.isFalse(
+        widenedScrub.contains('jane.doe@example.com'),
+        'Widening the allowlist for one shape must not weaken redaction elsewhere: ' +
+          widenedScrub
+      );
+    }
+  }
+
+  @IsTest
+  static void testLogApiExceptionNullExceptionStillPersists() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      Test.startTest();
+      Logger.logApiException(
+        'Slack',
+        'postMessage',
+        null,
+        null,
+        null,
+        (Exception) null
+      );
+      Test.stopTest();
+
+      List<API_Exception_Log__c> persisted = [
+        SELECT API_Name__c, Message__c, Exception_Type__c, Stack_Trace__c
+        FROM API_Exception_Log__c
+      ];
+      Assert.areEqual(
+        1,
+        persisted.size(),
+        'A null exception must still persist a row carrying the caller context rather than throw.'
+      );
+      Assert.areEqual(
+        'Slack',
+        persisted[0].API_Name__c,
+        'Caller context must persist even without an exception.'
+      );
+      Assert.isNull(
+        persisted[0].Exception_Type__c,
+        'A null exception persists a null Exception_Type__c.'
+      );
+      Assert.isNull(
+        persisted[0].Message__c,
+        'A null exception persists a null Message__c.'
+      );
+      Assert.isNull(
+        persisted[0].Stack_Trace__c,
+        'A null exception persists a null Stack_Trace__c.'
+      );
+    }
+  }
+
+  @IsTest
+  static void testLogApiExceptionSwallowsPersistenceFailure() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      Logger.apiPersistFailureForTest = new DmlException(
+        'injected persistence failure'
+      );
+
+      Test.startTest();
+      Logger.logApiException('Jira', 'createIssue', null, null, null, 'boom');
+      Test.stopTest();
+
+      Assert.areEqual(
+        0,
+        [SELECT COUNT() FROM API_Exception_Log__c],
+        'A persistence failure must be swallowed — no row, and reaching this assertion proves no rethrow.'
+      );
+      Assert.areEqual(
+        0,
+        [SELECT COUNT() FROM Debug_Log__c],
+        'The failure fallback warns to the debug log only — it must not recurse into any durable sink.'
+      );
+    }
+  }
+
+  @IsTest
+  static void testRetentionConfigCoversApiExceptionLog() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      Map<String, Integer> retention = new LogCleanupContext()
+        .getLogRetentionDays();
+
+      Assert.isTrue(
+        retention.containsKey('API_Exception_Log__c'),
+        'The shipped Log_Clean_Up__mdt record must register API_Exception_Log__c for retention.'
+      );
+      Assert.isTrue(
+        retention.get('API_Exception_Log__c') > 0,
+        'The API_Exception_Log__c retention window must be a positive day count.'
+      );
+    }
   }
 }
