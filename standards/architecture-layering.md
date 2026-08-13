@@ -1,6 +1,6 @@
 # Architecture — Layering (Selector / Service / Domain)
 
-This file governs how Apex is organized into layers on top of this library: Selector, Service, Domain, and the LWC-facing controller that fronts them. Read it before structuring a new feature or reviewing one, when the question is "where does this logic belong." Pair with [architecture.md](architecture.md) for trigger framework and async guidance, and [apex.md](apex.md) for class-level conventions.
+This file governs how Apex is organized into layers on top of this library: Selector, Service, Domain, and the LWC-facing controller that fronts them. Read it before structuring a new feature or reviewing one, when the question is "where does this logic belong." Pair with [architecture.md](../best-practices/architecture.md) for trigger framework and async guidance, and [apex.md](../best-practices/apex.md) for class-level conventions.
 
 ## 1. Align with Apex Enterprise Patterns (fflib) — without importing the framework
 
