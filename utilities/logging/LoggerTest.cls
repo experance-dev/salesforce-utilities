@@ -515,6 +515,40 @@ private without sharing class LoggerTest {
   }
 
   @IsTest
+  static void testPersistErrorLogSkipsInZeroDmlHeadroomContext() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      Logger.simulateZeroDmlHeadroom = true;
+
+      Test.startTest();
+      Logger.log(System.LoggingLevel.ERROR, 'read-only context error', 'LoggerTest', 'zeroHeadroom');
+      Test.stopTest();
+
+      Assert.areEqual(
+        0,
+        [SELECT COUNT() FROM Debug_Log__c],
+        'With zero DML headroom the durable sink must be skipped entirely — reaching this assertion proves no uncatchable-limit attempt was made.'
+      );
+    }
+  }
+
+  @IsTest
+  static void testLogApiExceptionSkipsInZeroDmlHeadroomContext() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      Logger.simulateZeroDmlHeadroom = true;
+
+      Test.startTest();
+      Logger.logApiException('Jira', 'createIssue', null, null, null, 'read-only boom');
+      Test.stopTest();
+
+      Assert.areEqual(
+        0,
+        [SELECT COUNT() FROM API_Exception_Log__c],
+        'With zero DML headroom the API sink must be skipped — debug mirror only, no insert attempt.'
+      );
+    }
+  }
+
+  @IsTest
   static void testRetentionConfigCoversApiExceptionLog() {
     System.runAs(TestFactory.getCreatedTestUser()) {
       Map<String, Integer> retention = new LogCleanupContext()

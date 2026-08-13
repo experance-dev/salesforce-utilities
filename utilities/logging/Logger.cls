@@ -25,7 +25,7 @@
  * @last May 2026 — conformance refactor
  * @last August 2026 — error path hardened: logException ungated from printLogs, captures the exception
  *                      type name, persists Debug_Log__c as the durable sink; analyzer conformance
- * @last 2026-08-13 — API-exception sink ported: logApiException overloads persist API_Exception_Log__c
+ * @last 2026-08-13 — API-exception sink ported; zero-DML-headroom guard on both durable sinks (read-only contexts)
  *                     behind allowlist-based redaction; logException guarded against a null exception
  */
 // PMD waiver per docs/standards/static-analysis.md §3.6: facade aggregates 20+ narrow
@@ -39,6 +39,14 @@ public inherited sharing class Logger {
    */
   @TestVisible
   private static Exception apiPersistFailureForTest;
+
+  /**
+   * @description Forces `hasDmlHeadroom()` to report a zero-DML context so tests can
+   *              exercise the read-only guard — the real condition (a spent or zero
+   *              DML governor) cannot be fabricated inside a test transaction.
+   */
+  @TestVisible
+  private static Boolean simulateZeroDmlHeadroom = false;
 
   /**
    * @description Allowlisted token shapes that survive `scrubApiDiagnostic` — short
@@ -376,6 +384,11 @@ public inherited sharing class Logger {
         'logApiException'
       )
     );
+    if (!hasDmlHeadroom()) {
+      // Read-only context: same zero-DML-governor trap as persistErrorLog — the
+      // debug mirror above is the only safe sink.
+      return;
+    }
     try {
       if (apiPersistFailureForTest != null) {
         throw apiPersistFailureForTest;
@@ -562,6 +575,19 @@ public inherited sharing class Logger {
   }
 
   /**
+   * @description True when the current transaction can still issue at least one DML
+   *              statement. Read-only contexts (cacheable Aura reads, Visualforce
+   *              getters) run with a ZERO DML governor: there, even a try-wrapped
+   *              insert dies to an uncatchable `LimitException`, so callers must
+   *              check headroom and skip persistence rather than attempt-and-catch.
+   * @return `Boolean` true when one DML statement of headroom remains.
+   */
+  private static Boolean hasDmlHeadroom() {
+    return !simulateZeroDmlHeadroom &&
+      Limits.getLimitDmlStatements() - Limits.getDmlStatements() >= 1;
+  }
+
+  /**
    * @description Persists one `Debug_Log__c` record for an error-severity entry — the
    *              library's durable sink. Side effect: issues one DML insert in the
    *              caller's transaction (it counts against the caller's DML limits and,
@@ -586,6 +612,12 @@ public inherited sharing class Logger {
     String className,
     String methodName
   ) {
+    if (!hasDmlHeadroom()) {
+      // Read-only context (cacheable Aura read, VF getter): the DML governor is zero
+      // and LimitException is uncatchable — the debug stream already written by
+      // storeLog is the only safe sink here.
+      return;
+    }
     try {
       // SYSTEM_MODE bypass is intentional — see method comment above.
       Database.insert( //NOPMD
