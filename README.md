@@ -40,4 +40,4 @@ The library versions as a whole — semver git tags, one [CHANGELOG.md](CHANGELO
 
 ## License
 
-[The Unlicense](LICENSE) — public domain, no attribution required.
+[MIT](LICENSE) — use it freely, keep the copyright notice. The `DMLManager` family retains its original PatronManager BSD header under that code's own terms.
