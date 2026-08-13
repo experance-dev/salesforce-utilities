@@ -16,3 +16,5 @@ In-repo `.md` files in this folder are narrowly scoped — code conventions, arc
 | Architecture & patterns | [architecture.md](architecture.md) |
 
 Each file has a canonical section reflecting current practice plus a clearly marked `Proposed additions` section. Proposed items are recommendations — review and adopt explicitly before treating as canon.
+
+These files are the quick-reference conventions layer. The full standards set — one file per domain, including security architecture, Flow-vs-Apex boundaries, data-model design, DevOps, and the static-analysis merge gate — lives in [standards/](../standards/README.md).
