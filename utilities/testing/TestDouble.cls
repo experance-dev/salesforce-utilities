@@ -4,6 +4,13 @@
  *              without hand-rolling mocks.  See `TestDouble.Method` for the per-method
  *              builder and `TestDouble.TestDoubleException` for controlled throws.
  *
+ *              Dispatch contract: an invocation that matches no registered `Method`
+ *              throws `UnexpectedInvocationException` naming the method and its
+ *              arguments. Strict-by-default exists because silent null-return hides
+ *              missing registrations — a stubbed method with a nullable return can
+ *              satisfy an assertion the real collaborator never would. Call
+ *              `.lenient()` on the instance to opt back into null-return dispatch.
+ *
  *              Typical use:
  *              ```apex
  *              TestDouble stub = new TestDouble(SomeClass.class);
@@ -16,8 +23,9 @@
  * @author David Wood
  * @since June 2024
  * @last May 2026 — conformance refactor
- * @last August 2026 — overload guard rebuilt: each registered constraint list now matches independently,
- *                      so a types-only stub fires for calls with arguments; analyzer conformance
+ * @last 2026-08-13 — dispatch contract hardened: independent constraint-list matching
+ *                    (types / names / args each enforced only when registered) plus
+ *                    strict unmatched-invocation throw with lenient() opt-out
  */
 @isTest
 public without sharing class TestDouble implements System.StubProvider {
@@ -27,6 +35,9 @@ public without sharing class TestDouble implements System.StubProvider {
   // The Apex Type being stubbed — required by Test.createStub().
   // Note: system classes, sObjects, and static methods cannot be stubbed.
   Type objectType;
+
+  // When true, unmatched invocations return null instead of throwing.
+  Boolean lenientMode = false;
 
   /**
    * @description Builds a stub provider for the given Apex type.
@@ -43,6 +54,19 @@ public without sharing class TestDouble implements System.StubProvider {
    */
   public TestDouble track(Method toTrack) {
     this.methods.add(toTrack);
+
+    return this;
+  }
+
+  /**
+   * @description Opts this instance out of strict dispatch: unmatched invocations
+   *              return null instead of throwing `UnexpectedInvocationException`.
+   *              Reach for this only when the code under test legitimately calls
+   *              collaborator methods the test has no interest in registering.
+   * @return `TestDouble` — this instance, for chaining.
+   */
+  public TestDouble lenient() {
+    this.lenientMode = true;
 
     return this;
   }
@@ -66,8 +90,10 @@ public without sharing class TestDouble implements System.StubProvider {
    * @param listOfParamTypes  Parameter types (used for overload disambiguation).
    * @param listOfParamNames  Parameter names (used for overload disambiguation).
    * @param listOfArgs        Actual argument values.
-   * @return `Object` — the value registered via `Method.returning()`, or null
-   *         if no matching stub was found (intentional: unregistered calls break tests).
+   * @return `Object` — the value registered via `Method.returning()`; when no
+   *         registered stub matches, null only in lenient mode.
+   * @throws UnexpectedInvocationException When no registered stub matches the
+   *         invocation and `lenient()` has not been called on this instance.
    */
   @SuppressWarnings('PMD.ExcessiveParameterList')
   public Object handleMethodCall(
@@ -99,9 +125,40 @@ public without sharing class TestDouble implements System.StubProvider {
         }
       }
     }
-    // Returning null is deliberate: unregistered calls will cause downstream
-    // NPEs in tests, immediately revealing missing stub registrations.
-    return null;
+    if (lenientMode) {
+      // Lenient dispatch: the test opted in to null-return for unmatched calls.
+      return null;
+    }
+    // Strict dispatch: surface the missing registration at the call site instead
+    // of letting a silent null satisfy an assertion the real collaborator wouldn't.
+    throw new UnexpectedInvocationException(
+      'Unexpected invocation on ' +
+        String.valueOf(objectType) +
+        ' stub: ' +
+        stubbedMethodName +
+        '(' +
+        renderArguments(listOfArgs) +
+        '). No registered TestDouble.Method matched this call. Register a ' +
+        'matching Method via track(), or call lenient() on the TestDouble to ' +
+        'restore null-return dispatch.'
+    );
+  }
+
+  /**
+   * @description Renders an argument list for the strict-dispatch exception
+   *              message so the failure names the exact call that had no registration.
+   * @param arguments The invocation's actual argument values; null-safe.
+   * @return `String` — the arguments rendered as a comma-separated list, or empty.
+   */
+  private static String renderArguments(List<Object> arguments) {
+    if (arguments == null || arguments.isEmpty()) {
+      return '';
+    }
+    List<String> rendered = new List<String>();
+    for (Object argument : arguments) {
+      rendered.add(String.valueOf(argument));
+    }
+    return String.join(rendered, ', ');
   }
 
   /**
@@ -210,5 +267,14 @@ public without sharing class TestDouble implements System.StubProvider {
    *              module-level catch hierarchy.
    */
   public class TestDoubleException extends UtilitiesModuleException {
+  }
+
+  /**
+   * @description Thrown by strict dispatch when an invocation matches no
+   *              registered `Method` — the message names the method and its
+   *              rendered arguments so the missing registration is a one-read fix.
+   *              Suppressed by calling `lenient()` on the `TestDouble` instance.
+   */
+  public class UnexpectedInvocationException extends UtilitiesModuleException {
   }
 }

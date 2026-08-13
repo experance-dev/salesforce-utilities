@@ -1,6 +1,27 @@
 /**
- * @description Classifies the current Salesforce execution context (quiddity) and
- *              exposes pre-built trusted/untrusted quiddity lists for guard checks.
+ * @description Execution-channel guard. Classifies the current transaction's quiddity —
+ *              the channel the request arrived through (Aura, REST, batch, queueable,
+ *              test runner, ...) — and answers allow/deny questions about it through
+ *              immutable membership checks (`isTrusted`, `isUntrusted`, `isTestQuiddity`)
+ *              and channel identifiers (`isRestQuiddity`, `isApiQuiddity`, ...).
+ *              Adapted from the Apex Recipes quiddity sample.
+ *
+ *              Contract — what a quiddity verdict does and does not mean. A quiddity
+ *              check gates WHICH CHANNEL may reach a code path; it says nothing about
+ *              WHO is calling or WHAT they may touch. "Trusted" here means only that
+ *              the channel is not a direct, externally-reachable entry point carrying
+ *              caller-shaped input — it is NEVER a substitute for sharing enforcement,
+ *              CRUD/FLS checks (`WITH USER_MODE` / `AccessLevel.USER_MODE`), or
+ *              business-level authorization. A batch or queueable context is a
+ *              "trusted" channel and still processes user-authored record data in
+ *              system context; every read and write on such a path keeps its full
+ *              access-check discipline regardless of what this guard returns.
+ *
+ *              The trust lists are private. Consumers ask membership questions
+ *              through the methods below; nothing outside this class can read or
+ *              mutate the lists, so the guard's verdict cannot drift mid-transaction.
+ *              Tests that need the guard to see a different quiddity use the
+ *              `@TestVisible testQuiddityOverride` seam — the only test seam exposed.
  *
  *              Sharing modifier: `inherited sharing` — this class performs no SOQL
  *              and no DML; it only inspects `System.Request.getCurrent().getQuiddity()`.
@@ -8,11 +29,12 @@
  *              sharing model of its own on whatever transaction consults it.
  *
  * @group   Triggers
- * @author  Apex Recipes, David Wood
+ * @author  David Wood
  * @since   June 2024
  * @last    May 2026 — conformance refactor
- * @last    August 2026 — trust-list contract hardening: final lists, inherited sharing,
- *          @throws doc; analyzer conformance (constant naming, doc tags)
+ * @last    2026-08-13 — channel-guard contract: trust lists privatized behind immutable
+ *          membership checks (isTrusted / isUntrusted / isTestQuiddity); ApexDoc states
+ *          quiddity is never a stand-in for sharing/CRUD/FLS/business authorization
  */
 public inherited sharing class QuiddityGuard {
   /**
@@ -21,19 +43,15 @@ public inherited sharing class QuiddityGuard {
   @TestVisible
   private static Quiddity testQuiddityOverride;
 
+  // ─── Trust lists (private — membership methods below are the public surface) ─
+
   /**
-   * Non-exhaustive list of quiddities that do not include user-controlled data paths;
-   * safe to trust without manual FLS/CRUD checks.
-   *
-   * Trust contract (applies to all three lists below): these lists are published,
-   * read-only reference data. `final` blocks reassignment but Apex `final` does not
-   * block element mutation — `.add()` still compiles — so this comment carries the
-   * rest of the contract: never mutate a list's contents. A caller that mutates a
-   * trust list changes the guard's verdict for every other consumer in the
-   * transaction. Tests that need the guard to see a different quiddity use the
-   * `@TestVisible testQuiddityOverride` seam, not list mutation.
+   * Non-exhaustive set of quiddities whose channel is not a direct, externally
+   * reachable entry point. Channel classification only — records flowing through
+   * these channels still carry user-authored data, and every consumer keeps its
+   * full sharing/CRUD/FLS and business-authorization discipline.
    */
-  public static final List<Quiddity> TRUSTED_QUIDDITIES = new List<Quiddity>{
+  private static final Set<Quiddity> TRUSTED_QUIDDITIES = new Set<Quiddity>{
     Quiddity.SYNCHRONOUS,
     Quiddity.QUEUEABLE,
     Quiddity.BATCH_APEX,
@@ -43,20 +61,19 @@ public inherited sharing class QuiddityGuard {
   };
 
   /**
-   * Exhaustive list of quiddities that indicate a test execution.
-   * Read-only by contract — see the trust contract on `TRUSTED_QUIDDITIES`.
+   * Exhaustive set of quiddities that indicate a test execution.
    */
-  public static final List<Quiddity> TRUSTED_TEST_QUIDDITIES = new List<Quiddity>{
+  private static final Set<Quiddity> TRUSTED_TEST_QUIDDITIES = new Set<Quiddity>{
     Quiddity.RUNTEST_SYNC,
     Quiddity.RUNTEST_ASYNC,
     Quiddity.RUNTEST_DEPLOY
   };
 
   /**
-   * Quiddities that may carry user-defined data; require FLS/CRUD checks before trusting.
-   * Read-only by contract — see the trust contract on `TRUSTED_QUIDDITIES`.
+   * Quiddities whose channel is a direct, externally reachable entry point
+   * carrying caller-shaped input (UI actions, inbound API calls, email services).
    */
-  public static final List<Quiddity> UNTRUSTED_QUIDDITIES = new List<Quiddity>{
+  private static final Set<Quiddity> UNTRUSTED_QUIDDITIES = new Set<Quiddity>{
     Quiddity.AURA,
     Quiddity.DISCOVERABLE_LOGIN,
     Quiddity.INBOUND_EMAIL_SERVICE,
@@ -79,7 +96,66 @@ public inherited sharing class QuiddityGuard {
     return q;
   }
 
-  // ─── Public API ─────────────────────────────────────────────────────────────
+  // ─── Membership checks — the immutable public surface for the trust lists ───
+
+  /**
+   * @description Tests a quiddity for membership in the trusted-channel set.
+   *              Channel classification only — never a substitute for sharing,
+   *              CRUD/FLS, or business authorization (see the class contract).
+   * @param quiddity The quiddity to classify.
+   * @return True when the supplied quiddity is a trusted channel.
+   */
+  public static Boolean isTrusted(Quiddity quiddity) {
+    return TRUSTED_QUIDDITIES.contains(quiddity);
+  }
+
+  /**
+   * @description Tests a quiddity for membership in the untrusted-channel set —
+   *              direct, externally reachable entry points carrying caller-shaped input.
+   * @param quiddity The quiddity to classify.
+   * @return True when the supplied quiddity is an untrusted channel.
+   */
+  public static Boolean isUntrusted(Quiddity quiddity) {
+    return UNTRUSTED_QUIDDITIES.contains(quiddity);
+  }
+
+  /**
+   * @description Tests a quiddity for membership in the test-execution set.
+   * @param quiddity The quiddity to classify.
+   * @return True when the supplied quiddity indicates a test execution.
+   */
+  public static Boolean isTestQuiddity(Quiddity quiddity) {
+    return TRUSTED_TEST_QUIDDITIES.contains(quiddity);
+  }
+
+  /**
+   * @description Tests the current transaction's quiddity against the trusted-channel set.
+   * @return True when the current quiddity is a trusted channel.
+   */
+  public static Boolean isCurrentQuiddityTrusted() {
+    return isTrusted(getCurrentQuiddity());
+  }
+
+  /**
+   * @description Tests the current transaction's quiddity against the trusted-channel
+   *              set, optionally escalating a rejection into an exception.
+   * @param throwError When true, throws AccessException on rejection.
+   * @return True when the current quiddity is a trusted channel.
+   * @throws AccessException When the current quiddity is not a trusted channel
+   *         and `throwError` is true.
+   */
+  public static Boolean isCurrentQuiddityTrusted(Boolean throwError) {
+    Quiddity q = getCurrentQuiddity();
+    Boolean trusted = isTrusted(q);
+    if (!trusted && throwError) {
+      throw new AccessException(
+        'Quiddity not acceptable: ' + q + '. Trusted-channel quiddities only.'
+      );
+    }
+    return trusted;
+  }
+
+  // ─── Caller-supplied accept lists ───────────────────────────────────────────
 
   /**
    * @description Tests the current quiddity against the supplied accept list.
@@ -128,6 +204,8 @@ public inherited sharing class QuiddityGuard {
   ) {
     return !isAcceptableQuiddity(acceptableQuiddities);
   }
+
+  // ─── Channel identifiers ────────────────────────────────────────────────────
 
   /**
    * @description Identifies a REST execution context.

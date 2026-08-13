@@ -4,10 +4,12 @@
  * from the running org's Account.Type describe at runtime instead of assuming any specific entry.
  * @group Picklists
  * @see UtilPickLists
+ * @see PicklistMatcher
  * @author David Wood
  * @since 2024
  * @last May 2026 — conformance refactor
- * @last August 2026 — portable describe-derived expectations; null-guard coverage for unknown sObject names
+ * @last 2026-08-13 — pins for the findClosestMatch result-object engine: exact, near,
+ *                    below-threshold, tie determinism, and normalization
  */
 @isTest
 public without sharing class UtilPickListsTest {
@@ -248,6 +250,169 @@ public without sharing class UtilPickListsTest {
         value,
         'Should return an empty string when no value or label matches exactly.'
       );
+    }
+    Test.stopTest();
+  }
+
+  /**
+   * @description An exact candidate (after normalization) wins with confidence 1 and wasExact
+   *              true, whether the search hit the value or the label.
+   */
+  @isTest
+  static void testFindClosestMatchExact() {
+    Test.startTest();
+    System.runAs(TestFactory.getMinAccessUser()) {
+      PicklistMatcher.PicklistMatchResult valueHit = UtilPickLists.findClosestMatch(
+        new Map<String, String>{ 'Apple' => 'Apple Fruit', 'Banana' => 'Banana Fruit' },
+        'Apple',
+        0.5
+      );
+      Assert.areEqual('Apple', valueHit.matchedValue, 'An exact value match should win.');
+      Assert.isTrue(valueHit.confidence == 1, 'An exact match carries confidence 1.');
+      Assert.isTrue(valueHit.wasExact, 'An exact match sets wasExact.');
+
+      // Label equality counts as exact and returns the entry's VALUE, not the label.
+      PicklistMatcher.PicklistMatchResult labelHit = UtilPickLists.findClosestMatch(
+        new Map<String, String>{ 'A1' => 'Apple' },
+        'APPLE',
+        0.9
+      );
+      Assert.areEqual('A1', labelHit.matchedValue, 'A label match should return the value key.');
+      Assert.isTrue(labelHit.wasExact, 'A normalized label match counts as exact.');
+    }
+    Test.stopTest();
+  }
+
+  /**
+   * @description A near miss returns the closest candidate with a proportional confidence and
+   *              wasExact false.
+   */
+  @isTest
+  static void testFindClosestMatchNear() {
+    Test.startTest();
+    System.runAs(TestFactory.getMinAccessUser()) {
+      PicklistMatcher.PicklistMatchResult result = UtilPickLists.findClosestMatch(
+        new Map<String, String>{ 'Apple' => 'Apple', 'Banana' => 'Banana' },
+        'Appl',
+        0.5
+      );
+      Assert.areEqual('Apple', result.matchedValue, 'The nearest candidate should win.');
+      // Levenshtein 1 over the longer length 5: confidence = 1 - 1/5.
+      Assert.isTrue(result.confidence == 0.8, 'Confidence should be 1 minus distance/length (0.8).');
+      Assert.isFalse(result.wasExact, 'A near miss must not claim exactness.');
+    }
+    Test.stopTest();
+  }
+
+  /**
+   * @description When nothing clears the caller's minimum confidence, no match is returned —
+   *              matchedValue null, confidence 0, wasExact false.
+   */
+  @isTest
+  static void testFindClosestMatchBelowThreshold() {
+    Test.startTest();
+    System.runAs(TestFactory.getMinAccessUser()) {
+      PicklistMatcher.PicklistMatchResult result = UtilPickLists.findClosestMatch(
+        new Map<String, String>{ 'Apple' => 'Apple' },
+        'zzzz',
+        0.9
+      );
+      Assert.isNull(result.matchedValue, 'Below the minimum confidence there is no match.');
+      Assert.isTrue(result.confidence == 0, 'The no-match result carries confidence 0.');
+      Assert.isFalse(result.wasExact, 'The no-match result is never exact.');
+
+      // Null minimum is treated as 0 — the nearest candidate always returns.
+      PicklistMatcher.PicklistMatchResult unbounded = UtilPickLists.findClosestMatch(
+        new Map<String, String>{ 'Apple' => 'Apple' },
+        'ap',
+        null
+      );
+      Assert.areEqual('Apple', unbounded.matchedValue, 'A null minimum admits any nearest match.');
+    }
+    Test.stopTest();
+  }
+
+  /**
+   * @description Confidence ties break to the candidate whose normalized value sorts first
+   *              alphabetically — identical results regardless of map insertion order.
+   */
+  @isTest
+  static void testFindClosestMatchTieDeterminism() {
+    Test.startTest();
+    System.runAs(TestFactory.getMinAccessUser()) {
+      PicklistMatcher.PicklistMatchResult forwardOrder = UtilPickLists.findClosestMatch(
+        new Map<String, String>{ 'AB' => 'AB', 'AD' => 'AD' },
+        'AC',
+        0
+      );
+      PicklistMatcher.PicklistMatchResult reverseOrder = UtilPickLists.findClosestMatch(
+        new Map<String, String>{ 'AD' => 'AD', 'AB' => 'AB' },
+        'AC',
+        0
+      );
+      Assert.areEqual('AB', forwardOrder.matchedValue, 'A tie resolves alphabetically to AB.');
+      Assert.areEqual(
+        forwardOrder.matchedValue,
+        reverseOrder.matchedValue,
+        'Tie resolution must not depend on map insertion order.'
+      );
+    }
+    Test.stopTest();
+  }
+
+  /**
+   * @description Case and whitespace are normalized before distance: padded, mixed-case,
+   *              multi-space input still lands an exact match.
+   */
+  @isTest
+  static void testFindClosestMatchNormalization() {
+    Test.startTest();
+    System.runAs(TestFactory.getMinAccessUser()) {
+      PicklistMatcher.PicklistMatchResult result = UtilPickLists.findClosestMatch(
+        new Map<String, String>{ 'Apple Pie' => 'Apple Pie' },
+        '  aPPle   pIe ',
+        0.9
+      );
+      Assert.areEqual('Apple Pie', result.matchedValue, 'Normalization should land the exact value.');
+      Assert.isTrue(result.wasExact, 'Equality after normalization counts as exact.');
+      Assert.isTrue(result.confidence == 1, 'Equality after normalization carries confidence 1.');
+    }
+    Test.stopTest();
+  }
+
+  /**
+   * @description Field-based overload: a null field and a blank search both return the no-match
+   *              result; a describe-derived real value round-trips as an exact match.
+   */
+  @isTest
+  static void testFindClosestMatchFieldOverload() {
+    Test.startTest();
+    System.runAs(TestFactory.getMinAccessUser()) {
+      PicklistMatcher.PicklistMatchResult nullField = UtilPickLists.findClosestMatch(
+        (Schema.SObjectField) null,
+        'Customer',
+        0.5
+      );
+      Assert.isNull(nullField.matchedValue, 'A null field yields the no-match result.');
+
+      PicklistMatcher.PicklistMatchResult blankSearch = UtilPickLists.findClosestMatch(
+        Account.Type,
+        '   ',
+        0.5
+      );
+      Assert.isNull(blankSearch.matchedValue, 'A blank search yields the no-match result.');
+
+      String knownValue = deriveActiveTypeValue();
+      if (knownValue != null) {
+        PicklistMatcher.PicklistMatchResult roundTrip = UtilPickLists.findClosestMatch(
+          Account.Type,
+          knownValue,
+          0.5
+        );
+        Assert.isNotNull(roundTrip.matchedValue, 'A real value should clear the minimum.');
+        Assert.isTrue(roundTrip.wasExact, 'A real value round-trips as an exact match.');
+        Assert.isTrue(roundTrip.confidence == 1, 'A real value round-trips with confidence 1.');
+      }
     }
     Test.stopTest();
   }
