@@ -1,15 +1,15 @@
 /**
  * @description Test class for SingleEmail. Asserts built-message shape from buildEmail(),
- *              dispatch through a capturing fake dispatcher (nothing is ever actually sent —
+ *              dispatch through a capturing mock dispatcher (nothing is ever actually sent —
  *              dispatch tests assert zero email invocations), sender display name fallback
- *              resolution, and the failure path through inspectResults via a fake failed
+ *              resolution, and the failure path through inspectResults via a mock failed
  *              send result. No test in this class calls Messaging.sendEmail.
  * @group Email
  * @see SingleEmail
  * @author David Wood
  * @since March 2024
  * @last May 2026 — conformance refactor
- * @last August 2026 — rewritten around buildEmail() and the capturing dispatcher fake; no real dispatch anywhere;
+ * @last August 2026 — rewritten around buildEmail() and the capturing mock dispatcher; no real dispatch anywhere;
  *                     analyzer conformance
  */
 @isTest
@@ -20,7 +20,7 @@ private without sharing class SingleEmailTest {
   static final String REPLY_TO_ADDRESS = 'replies@mailinator.com';
 
   /**
-   * @description Capturing fake for the dispatcher seam: records what sendMail() hands it and
+   * @description Capturing mock for the dispatcher seam: records what sendMail() hands it and
    *              returns a configurable result list. Never touches Messaging.sendEmail.
    */
   private class CapturingEmailDispatcher implements SingleEmail.IEmailDispatcher {
@@ -166,8 +166,8 @@ private without sharing class SingleEmailTest {
   @isTest
   static void testSendMailDispatchesThroughSeam() {
     System.runAs(TestFactory.getCreatedTestUser()) {
-      CapturingEmailDispatcher fakeDispatcher = new CapturingEmailDispatcher();
-      SingleEmail.dispatcher = fakeDispatcher;
+      CapturingEmailDispatcher mockDispatcher = new CapturingEmailDispatcher();
+      SingleEmail.dispatcher = mockDispatcher;
 
       SingleEmail email = new SingleEmail(
         TO_ADDRESS,
@@ -187,17 +187,17 @@ private without sharing class SingleEmailTest {
       );
       Assert.areEqual(
         1,
-        fakeDispatcher.capturedMessages.size(),
+        mockDispatcher.capturedMessages.size(),
         'Exactly one message should reach the dispatcher'
       );
       Assert.areEqual(
         new List<String>{ TO_ADDRESS },
-        fakeDispatcher.capturedMessages[0].getToAddresses(),
+        mockDispatcher.capturedMessages[0].getToAddresses(),
         'The dispatched message should carry the recipient'
       );
       Assert.areEqual(
         false,
-        fakeDispatcher.capturedAllOrNone,
+        mockDispatcher.capturedAllOrNone,
         'allOrNone should pass through the seam unchanged'
       );
       Assert.areEqual(
@@ -211,8 +211,8 @@ private without sharing class SingleEmailTest {
   @isTest
   static void testSendMailNoRecipientsReturnsFalseWithoutDispatch() {
     System.runAs(TestFactory.getCreatedTestUser()) {
-      CapturingEmailDispatcher fakeDispatcher = new CapturingEmailDispatcher();
-      SingleEmail.dispatcher = fakeDispatcher;
+      CapturingEmailDispatcher mockDispatcher = new CapturingEmailDispatcher();
+      SingleEmail.dispatcher = mockDispatcher;
 
       SingleEmail email = new SingleEmail();
       email.subject = 'No Recipients';
@@ -230,7 +230,7 @@ private without sharing class SingleEmailTest {
       );
       Assert.areEqual(
         0,
-        fakeDispatcher.capturedMessages.size(),
+        mockDispatcher.capturedMessages.size(),
         'The dispatcher must not be invoked when there are no recipients'
       );
       Assert.areEqual(
@@ -244,9 +244,9 @@ private without sharing class SingleEmailTest {
   @isTest
   static void testSendMailReportsFailureFromDispatcherResults() {
     System.runAs(TestFactory.getCreatedTestUser()) {
-      CapturingEmailDispatcher fakeDispatcher = new CapturingEmailDispatcher();
-      fakeDispatcher.resultsToReturn.add(buildFailedSendResult());
-      SingleEmail.dispatcher = fakeDispatcher;
+      CapturingEmailDispatcher mockDispatcher = new CapturingEmailDispatcher();
+      mockDispatcher.resultsToReturn.add(buildFailedSendResult());
+      SingleEmail.dispatcher = mockDispatcher;
 
       SingleEmail email = new SingleEmail(
         TO_ADDRESS,

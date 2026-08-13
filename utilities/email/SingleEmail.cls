@@ -4,7 +4,7 @@
  * Assembly and dispatch are separate steps: `buildEmail()` returns the fully-populated
  * `Messaging.SingleEmailMessage` without sending it, and `sendMail()` hands that message to an
  * injectable `IEmailDispatcher` seam whose production implementation reserves capacity and calls
- * `Messaging.sendEmail`. Tests inject a capturing fake through the `@TestVisible` dispatcher field,
+ * `Messaging.sendEmail`. Tests inject a capturing mock through the `@TestVisible` dispatcher field,
  * so no test path ever dispatches real email.
  *
  * Sender display name resolution: the per-message `senderDisplayName` property wins when set;
@@ -26,7 +26,7 @@ public with sharing class SingleEmail {
   // ─── Fields ─────────────────────────────────────────────────────────────────
 
   // Dispatch seam instance — production implementation by default; tests inject a
-  // capturing fake through the @TestVisible seam so nothing is ever really sent.
+  // capturing mock through the @TestVisible seam so nothing is ever really sent.
   @TestVisible
   private static IEmailDispatcher dispatcher = new EmailDispatcherImpl();
 
@@ -59,7 +59,7 @@ public with sharing class SingleEmail {
    * @description Library-owned per-message send outcome. The platform's
    *              `Messaging.SendEmailResult` has no public constructor, so a seam typed
    *              on it can never fabricate a failure in a test; this wrapper is freely
-   *              constructible, which is the entire point — fakes can script any reply
+   *              constructible, which is the entire point — mocks can script any reply
    *              (success, partial failure, capacity error) and the failure branch stays
    *              testable.
    */
@@ -82,7 +82,7 @@ public with sharing class SingleEmail {
 
   /**
    * @description Dispatch seam for outbound email. The production implementation calls
-   *              `Messaging.sendEmail`; tests inject a capturing fake so nothing is sent
+   *              `Messaging.sendEmail`; tests inject a capturing mock so nothing is sent
    *              and any reply can be scripted via `SendResult`.
    */
   public interface IEmailDispatcher {
