@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Transaction_Id__c</fullName>
+    <label>Transaction Id</label>
+    <type>Text</type>
+    <length>255</length>
+    <required>false</required>
+    <description>Correlation id tying this row to the request that produced it — typically System.Request.getCurrent().getRequestId(), or the correlation id surfaced to the caller in a rethrown exception message.</description>
+</CustomField>
