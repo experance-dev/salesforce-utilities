@@ -489,7 +489,7 @@ public without sharing class TestFactory {
   /**
    * @description Generates a well-formed fake record Id without any DML.
    * @param sot SObjectType to generate a fake Id for.
-   * @return A fake 18-char Id string safe for in-memory test assertions.
+   * @return A fake 15-char Id string safe for in-memory test assertions.
    */
   public static String getFakeId(Schema.SObjectType sot) {
     String result = String.valueOf(segment++);

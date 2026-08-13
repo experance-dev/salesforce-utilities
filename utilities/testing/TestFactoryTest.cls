@@ -1,15 +1,20 @@
 /**
- * @description Pins TestFactory's identity-safe user and permission-set resolution: exact-Name
+ * @description Exercises TestFactory's public surface. The factory ladder: convention-driven
+ *              defaults discovery on createSObject, caller-wins precedence over registered
+ *              defaults, explicit defaults-class resolution (unresolvable names throw),
+ *              createSObjectList sizing with the nameFieldMap uniquifier, the fake-Id
+ *              generator, and invalidateSObjectList. The identity pins: exact-Name
  *              permission-set matching (missing and ambiguous Names throw), the
  *              assignPermSetIfPresent skip-when-absent escape hatch, exactly-one enforcement on
- *              getCreatedTestUser, and precise rediscovery via getTestUserByUsername. These pins
- *              exist because the previous resolution shape (LIKE + first result, most-recent user
- *              by shared LastName) could run a security test under the wrong identity.
+ *              getCreatedTestUser, and precise rediscovery via getTestUserByUsername — because
+ *              the previous resolution shape (LIKE + first result, most-recent user by shared
+ *              LastName) could run a security test under the wrong identity.
  * @group Testing
  * @see TestFactory
  * @author David Wood
  * @since August 2026
  * @last 2026-08-13 — initial pinning coverage for exact-match / missing / ambiguous / if-present / created-identity paths.
+ * @last 2026-08-13 — factory-ladder coverage merged in: createSObject defaults/precedence/resolution, createSObjectList sizing + uniquifier, getFakeId, invalidateSObjectList.
  */
 @IsTest
 private class TestFactoryTest {
@@ -20,6 +25,147 @@ private class TestFactoryTest {
     // Setup-object DML boundary: TestFactory.createTestUser wraps its own insert in
     // System.runAs(admin) internally, so no explicit runAs is needed here.
     TestFactory.createTestUser(true, ADMIN_PROFILE);
+  }
+
+  // ── createSObject defaults ladder ────────────────────────────────────────
+
+  /** @description Convention discovery resolves TestFactoryDefaults.AccountDefaults from the SObject type and applies its field defaults. */
+  @IsTest
+  static void testCreateSObjectAppliesDefaultsByConvention() {
+    System.runAs(TestFactory.getTestUser(ADMIN_PROFILE)) {
+      Account templated = (Account) TestFactory.createSObject(new Account());
+
+      Assert.isNotNull(
+        templated.Name,
+        'Expected the convention-discovered AccountDefaults to populate Name.'
+      );
+    }
+  }
+
+  /** @description Caller-populated fields always win over registered defaults. */
+  @IsTest
+  static void testCreateSObjectRespectsCallerSuppliedValues() {
+    System.runAs(TestFactory.getTestUser(ADMIN_PROFILE)) {
+      Account preset = new Account(Name = 'Caller Wins', BillingState = 'NY');
+
+      Account result = (Account) TestFactory.createSObject(preset);
+
+      Assert.areEqual(
+        'Caller Wins',
+        result.Name,
+        'Expected the caller-supplied Name to survive defaults application.'
+      );
+      Assert.areEqual(
+        'NY',
+        result.BillingState,
+        'Expected the caller-supplied BillingState to survive defaults application.'
+      );
+    }
+  }
+
+  /** @description An explicitly named defaults class applies without disturbing caller-populated fields. */
+  @IsTest
+  static void testCreateSObjectByExplicitClassNameSucceeds() {
+    System.runAs(TestFactory.getTestUser(ADMIN_PROFILE)) {
+      Account result = (Account) TestFactory.createSObject(
+        new Account(Name = 'Explicit'),
+        'TestFactoryDefaults.AccountDefaults'
+      );
+
+      Assert.areEqual(
+        'Explicit',
+        result.Name,
+        'Expected the explicit defaults class to apply while the caller-supplied Name wins.'
+      );
+      Assert.isNotNull(
+        result.BillingState,
+        'Expected the explicit defaults class to fill fields the caller left blank.'
+      );
+    }
+  }
+
+  /** @description An unresolvable defaults-class name throws a TestFactoryException naming the offender. */
+  @IsTest
+  static void testCreateSObjectByInvalidClassNameThrows() {
+    System.runAs(TestFactory.getTestUser(ADMIN_PROFILE)) {
+      try {
+        TestFactory.createSObject(
+          new Account(),
+          'TestFactoryDefaults.NoSuchDefaults'
+        );
+        Assert.fail(
+          'Expected TestFactoryException for an unresolvable defaults class.'
+        );
+      } catch (TestFactory.TestFactoryException e) {
+        Assert.isTrue(
+          e.getMessage().contains('TestFactoryDefaults.NoSuchDefaults'),
+          'Expected the exception message to name the offending class. Got: ' +
+          e.getMessage()
+        );
+      }
+    }
+  }
+
+  // ── createSObjectList ────────────────────────────────────────────────────
+
+  /** @description createSObjectList builds the requested count and uniquifies each clone's Name with its index. */
+  @IsTest
+  static void testCreateSObjectListBuildsRequestedSize() {
+    System.runAs(TestFactory.getTestUser(ADMIN_PROFILE)) {
+      List<Account> built = (List<Account>) TestFactory.createSObjectList(
+        new Account(Name = 'Bulk'),
+        5
+      );
+
+      Assert.areEqual(5, built.size(), 'Expected the requested clone count.');
+      Assert.areEqual(
+        'Bulk 0',
+        built[0].Name,
+        'Expected the first clone to carry the index-zero Name uniquifier.'
+      );
+      Assert.areEqual(
+        'Bulk 4',
+        built[4].Name,
+        'Expected the last clone to carry the index-four Name uniquifier.'
+      );
+    }
+  }
+
+  /** @description Objects without a standard Name field uniquify through their nameFieldMap entry — Contact hangs off LastName. */
+  @IsTest
+  static void testCreateSObjectListUsesNameFieldMapForContacts() {
+    System.runAs(TestFactory.getTestUser(ADMIN_PROFILE)) {
+      List<Contact> built = (List<Contact>) TestFactory.createSObjectList(
+        new Contact(LastName = 'Cohort'),
+        3
+      );
+
+      Assert.areEqual(3, built.size(), 'Expected the requested clone count.');
+      Assert.areEqual(
+        'Cohort 0',
+        built[0].LastName,
+        'Expected the Contact uniquifier to hang off LastName, not Name.'
+      );
+    }
+  }
+
+  /** @description The explicit-defaults overload still bulk-clones and applies the index uniquifier. */
+  @IsTest
+  static void testCreateSObjectListExplicitDefaultsClassResolves() {
+    System.runAs(TestFactory.getTestUser(ADMIN_PROFILE)) {
+      List<Opportunity> built = (List<Opportunity>) TestFactory.createSObjectList(
+        new Opportunity(Name = 'Pipeline'),
+        2,
+        'TestFactoryDefaults.OpportunityDefaults'
+      );
+
+      Assert.areEqual(2, built.size(), 'Expected the requested clone count.');
+      Assert.areEqual(
+        'Pipeline 0',
+        built[0].Name,
+        'Expected explicit-defaults clones to receive the index uniquifier.'
+      );
+    }
   }
 
   // ── assignPermSetToUser ──────────────────────────────────────────────────
@@ -286,6 +432,68 @@ private class TestFactoryTest {
           e.getMessage()
         );
       }
+    }
+  }
+
+  // ── getFakeId / invalidateSObjectList ────────────────────────────────────
+
+  /** @description getFakeId honors the 15-character contract — 3-char key prefix + 12-digit zero-padded counter; assigning to an Id variable normalizes to 18. */
+  @IsTest
+  static void testGetFakeIdReturnsKeyPrefixedId() {
+    System.runAs(TestFactory.getTestUser(ADMIN_PROFILE)) {
+      String fake = TestFactory.getFakeId(Account.SObjectType);
+
+      Assert.areEqual(
+        15,
+        fake.length(),
+        'Expected the 15-character contract: 3-char key prefix + 12-digit zero-padded counter.'
+      );
+      Assert.isTrue(
+        fake.startsWith(
+          Account.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED)
+            .getKeyPrefix()
+        ),
+        'Expected the fake Id to carry the SObject type\'s key prefix.'
+      );
+    }
+  }
+
+  /** @description Successive getFakeId calls return distinct values within a transaction. */
+  @IsTest
+  static void testGetFakeIdReturnsDistinctValuesPerCall() {
+    System.runAs(TestFactory.getTestUser(ADMIN_PROFILE)) {
+      String first = TestFactory.getFakeId(Account.SObjectType);
+      String second = TestFactory.getFakeId(Account.SObjectType);
+
+      Assert.areNotEqual(
+        first,
+        second,
+        'Expected successive fake Ids to differ within a transaction.'
+      );
+    }
+  }
+
+  /** @description invalidateSObjectList blanks every record's Name so negative-path tests can force validation failures. */
+  @IsTest
+  static void testInvalidateSObjectListBlanksNameField() {
+    System.runAs(TestFactory.getTestUser(ADMIN_PROFILE)) {
+      List<Account> built = (List<Account>) TestFactory.createSObjectList(
+        new Account(Name = 'Bad'),
+        2
+      );
+
+      List<SObject> mutated = TestFactory.invalidateSObjectList(built);
+
+      Assert.areEqual(
+        '',
+        mutated[0].get('Name'),
+        'Expected invalidateSObjectList to blank the first record\'s Name.'
+      );
+      Assert.areEqual(
+        '',
+        mutated[1].get('Name'),
+        'Expected invalidateSObjectList to blank every record\'s Name.'
+      );
     }
   }
 
