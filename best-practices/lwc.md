@@ -1,6 +1,6 @@
 # Lightning Web Components
 
-> Most of this file is **proposed** — the seed guidelines didn't cover LWC beyond "use headless LWC actions for scheduling." Review and codify the items below before treating as canon.
+> Ratified by David Wood 2026-05-12. The conventions below are canon for all LWC work in this codebase.
 
 ## Canonical guidance from existing standards
 

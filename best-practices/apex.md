@@ -4,13 +4,13 @@
 
 ApexDoc annotations live **only in the class header** (not on every method):
 
-| Tag | Value |
-| --- | --- |
-| `@description` | One-line purpose statement. |
-| `@group` | Type / category (e.g. `Service`, `Domain`, `Selector`). |
-| `@author` | Author name. |
-| `@since` | Existing date, or current month/year (e.g. `May 2026`). |
-| `@last` | Current date + brief change note; append to existing entries. |
+| Tag            | Value                                                         |
+| -------------- | ------------------------------------------------------------- |
+| `@description` | One-line purpose statement.                                   |
+| `@group`       | Type / category (e.g. `Service`, `Domain`, `Selector`).       |
+| `@author`      | Author name.                                                  |
+| `@since`       | Existing date, or current month/year (e.g. `May 2026`).       |
+| `@last`        | Current date + brief change note; append to existing entries. |
 
 Comment groupings/sections, not lines. Method-level ApexDoc only when params/returns warrant `@param` / `@return`.
 
@@ -22,14 +22,14 @@ Comment groupings/sections, not lines. Method-level ApexDoc only when params/ret
 ## Documentation
 
 - Inline comments only where logic isn't self-evident to a competent Salesforce engineer.
-- Document the *why*, not the *what* — well-named identifiers describe themselves.
+- Document the _why_, not the _what_ — well-named identifiers describe themselves.
 
 ## Complexity budget
 
-| Limit | Per method | Per class |
-| --- | --- | --- |
-| Apex complexity | < 8 | < 45 |
-| Cyclomatic complexity | < 8 | < 36 |
+| Limit                 | Per method | Per class |
+| --------------------- | ---------- | --------- |
+| Apex complexity       | < 8        | < 45      |
+| Cyclomatic complexity | < 8        | < 36      |
 
 Decompose anything over budget. Prefer `Map` lookups over nested loops. Single responsibility per method.
 
@@ -61,7 +61,8 @@ try {
 
 ```apex
 /** @description Custom exception class for OrderProcessor errors. */
-public class OrderProcessorException extends OrderModuleException {}
+public class OrderProcessorException extends OrderModuleException {
+}
 ```
 
 ## Caching
@@ -90,6 +91,12 @@ Database.insert(accs, AccessLevel.USER_MODE);
 ```
 
 Audit `DMLManager.xxxAsUser` to confirm it uses `AccessLevel.USER_MODE` internally.
+
+**CMDT carve-out.** `WITH SYSTEM_MODE` is acceptable on Custom Metadata Type queries since CMDT reads bypass CRUD/FLS by platform rule. `WITH USER_MODE` on a CMDT SOQL is semantically policy-theater and has historically raised `QueryException` on older API versions. Prefer `WITH SYSTEM_MODE` (or no clause — CMDT reads ignore both) when the query targets a `__mdt` object; document the choice in the method ApexDoc.
+
+```apex
+List<Integration_Config__mdt> cfg = [SELECT Id, SObject_Name__c FROM Integration_Config__mdt WITH SYSTEM_MODE];
+```
 
 ### Logging discipline
 
