@@ -16,7 +16,8 @@
  * @author David Wood
  * @since June 2024
  * @last May 2026 — conformance refactor
- * @last August 2026 — overload guard rebuilt: each registered constraint list now matches independently, so a types-only stub fires for calls with arguments
+ * @last August 2026 — overload guard rebuilt: each registered constraint list now matches independently,
+ *                      so a types-only stub fires for calls with arguments; analyzer conformance
  */
 @isTest
 public without sharing class TestDouble implements System.StubProvider {
@@ -28,6 +29,7 @@ public without sharing class TestDouble implements System.StubProvider {
   Type objectType;
 
   /**
+   * @description Builds a stub provider for the given Apex type.
    * @param objectType The Apex Type to stub (e.g. MyService.class).
    */
   public TestDouble(Type objectType) {
@@ -125,6 +127,7 @@ public without sharing class TestDouble implements System.StubProvider {
     List<Object> listOfArgs = new List<Object>();
 
     /**
+     * @description Names the method this stub intercepts.
      * @param methodName Name of the method to stub.
      */
     public Method(String methodName) {

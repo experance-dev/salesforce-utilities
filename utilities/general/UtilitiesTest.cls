@@ -8,7 +8,7 @@
  * @since June 2024
  * @last May 2026 — conformance refactor
  * @last August 2026 — DML-free map-builder fixtures; describe-derived record-type expectations;
- *                     direct coverage for list/type helpers; shape asserts over type asserts
+ *                     direct coverage for list/type helpers; shape asserts; analyzer conformance
  */
 @isTest
 public without sharing class UtilitiesTest {
@@ -344,7 +344,9 @@ public without sharing class UtilitiesTest {
   static void testGetRecordTypeIdValid() {
     // Derive an existing Account record type from the describe so the test
     // travels between orgs instead of assuming a specific developer name.
-    Map<String, Schema.RecordTypeInfo> infosByDeveloperName = Account.SObjectType.getDescribe()
+    Map<String, Schema.RecordTypeInfo> infosByDeveloperName = Account.SObjectType.getDescribe(
+        SObjectDescribeOptions.DEFERRED
+      )
       .getRecordTypeInfosByDeveloperName();
     String existingDeveloperName = null;
     for (String developerName : infosByDeveloperName.keySet()) {

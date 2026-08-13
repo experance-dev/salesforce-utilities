@@ -9,7 +9,8 @@
  * @author David Wood
  * @since March 2024
  * @last May 2026 — conformance refactor
- * @last August 2026 — rewritten around buildEmail() and the capturing dispatcher fake; no real dispatch anywhere
+ * @last August 2026 — rewritten around buildEmail() and the capturing dispatcher fake; no real dispatch anywhere;
+ *                     analyzer conformance
  */
 @isTest
 private without sharing class SingleEmailTest {
@@ -19,14 +20,20 @@ private without sharing class SingleEmailTest {
   static final String REPLY_TO_ADDRESS = 'replies@mailinator.com';
 
   /**
-   * Capturing fake for the dispatcher seam: records what sendMail() hands it and returns a
-   * configurable result list. Never touches Messaging.sendEmail.
+   * @description Capturing fake for the dispatcher seam: records what sendMail() hands it and
+   *              returns a configurable result list. Never touches Messaging.sendEmail.
    */
   private class CapturingEmailDispatcher implements SingleEmail.IEmailDispatcher {
     public List<Messaging.SingleEmailMessage> capturedMessages = new List<Messaging.SingleEmailMessage>();
     public Boolean capturedAllOrNone;
     public List<SingleEmail.SendResult> resultsToReturn = new List<SingleEmail.SendResult>();
 
+    /**
+     * @description Records the handed-off batch and flag, then returns the scripted results.
+     * @param messages  Messages sendMail() attempted to dispatch; captured for assertion.
+     * @param allOrNone Pass-through allOrNone flag; captured for assertion.
+     * @return The pre-configured `resultsToReturn` list.
+     */
     public List<SingleEmail.SendResult> send(
       List<Messaging.SingleEmailMessage> messages,
       Boolean allOrNone
@@ -38,8 +45,9 @@ private without sharing class SingleEmailTest {
   }
 
   /**
-   * Builds a failed send result — the library-owned SendResult is freely constructible,
-   * so the failure path needs no platform-type tricks.
+   * @description Builds a failed send result — the library-owned SendResult is freely
+   *              constructible, so the failure path needs no platform-type tricks.
+   * @return A `SendResult` with success=false and one simulated error message.
    */
   private static SingleEmail.SendResult buildFailedSendResult() {
     return new SingleEmail.SendResult(

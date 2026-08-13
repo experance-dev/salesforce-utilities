@@ -10,7 +10,8 @@
  * @author David Wood
  * @since March 2024
  * @last August 2026 — rewrite alongside RestClient: wire-shape assertions via
- *                     request capture, native-PATCH proof, negative paths.
+ *                     request capture, native-PATCH proof, negative paths;
+ *                     analyzer conformance.
  */
 @isTest
 private without sharing class RestClientTest {
@@ -151,13 +152,19 @@ private without sharing class RestClientTest {
   static void testPutBuildsRequestOnTheWire() {
     HttpCalloutMockFactory mock = armMock(200);
     RestClient client = new RestClient(CREDENTIAL);
+    HttpResponse response;
 
     System.runAs(TestFactory.getCreatedTestUser()) {
       Test.startTest();
-      client.put('/widgets/1', '', REQUEST_BODY);
+      response = client.put('/widgets/1', '', REQUEST_BODY);
       Test.stopTest();
     }
 
+    Assert.areEqual(
+      200,
+      response.getStatusCode(),
+      'Expected the mock status to surface on the returned response'
+    );
     assertWireShape(
       mock.receivedRequests[0],
       'PUT',
@@ -193,13 +200,19 @@ private without sharing class RestClientTest {
   static void testDelSendsHttpDeleteOnTheWire() {
     HttpCalloutMockFactory mock = armMock(204);
     RestClient client = new RestClient(CREDENTIAL).withTimeout(30000);
+    HttpResponse response;
 
     System.runAs(TestFactory.getCreatedTestUser()) {
       Test.startTest();
-      client.del('/widgets/1', '');
+      response = client.del('/widgets/1', '');
       Test.stopTest();
     }
 
+    Assert.areEqual(
+      204,
+      response.getStatusCode(),
+      'Expected the mock status to surface on the returned response'
+    );
     assertWireShape(
       mock.receivedRequests[0],
       'DELETE',
@@ -382,6 +395,13 @@ private without sharing class RestClientTest {
   }
 
   private class ThrowingCalloutMock implements HttpCalloutMock {
+    /**
+     * @description Simulates a transport-level failure by throwing instead of
+     *              responding — RAW_DETAIL is the message the client must
+     *              never surface.
+     * @param request The request being sent; unused.
+     * @return Never returns — always throws CalloutException.
+     */
     public HttpResponse respond(HttpRequest request) {
       CalloutException failure = new CalloutException();
       failure.setMessage(RAW_DETAIL);

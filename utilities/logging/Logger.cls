@@ -16,13 +16,15 @@
  * @since September 2024
  * @author David Wood
  * @last May 2026 — conformance refactor
- * @last August 2026 — error path hardened: logException ungated from the printLogs flag, captures
- *                      the exception type name, and persists a Debug_Log__c record as the durable sink
+ * @last August 2026 — error path hardened: logException ungated from printLogs, captures the exception
+ *                      type name, persists Debug_Log__c as the durable sink; analyzer conformance
  */
 public inherited sharing class Logger {
   // ─── Core dispatch ───────────────────────────────────────────────────────────
 
   /**
+   * @description Core dispatch — formats the entry, writes it to the debug log,
+   *              and routes error-severity entries to the durable sink.
    * @param level The logging level (e.g., DEBUG, INFO, WARN, ERROR, FATAL)
    * @param message The message to log
    * @param className The name of the class where the log is generated
@@ -44,6 +46,7 @@ public inherited sharing class Logger {
   }
 
   /**
+   * @description Logs a message at the given level with no class/method context.
    * @param level The logging level (e.g., DEBUG, INFO, WARN, ERROR, FATAL)
    * @param message The message to log
    */
@@ -54,6 +57,7 @@ public inherited sharing class Logger {
   // ─── Severity helpers ─────────────────────────────────────────────────────────
 
   /**
+   * @description Logs an info-level message with class/method context.
    * @param message The message to log
    * @param className The name of the class where the log is generated
    * @param methodName The name of the method where the log is generated
@@ -63,6 +67,7 @@ public inherited sharing class Logger {
   }
 
   /**
+   * @description Logs an info-level message.
    * @param message The message to log
    */
   public static void info(String message) {
@@ -70,6 +75,8 @@ public inherited sharing class Logger {
   }
 
   /**
+   * @description Logs an error-level message with class/method context;
+   *              error severity also persists to the durable sink.
    * @param message The message to log
    * @param className The name of the class where the log is generated
    * @param methodName The name of the method where the log is generated
@@ -83,6 +90,8 @@ public inherited sharing class Logger {
   }
 
   /**
+   * @description Logs an error-level message; error severity also persists to
+   *              the durable sink.
    * @param message The message to log
    */
   public static void error(String message) {
@@ -90,6 +99,7 @@ public inherited sharing class Logger {
   }
 
   /**
+   * @description Logs a warn-level message with class/method context.
    * @param message The message to log
    * @param className The name of the class where the log is generated
    * @param methodName The name of the method where the log is generated
@@ -99,6 +109,7 @@ public inherited sharing class Logger {
   }
 
   /**
+   * @description Logs a warn-level message.
    * @param message The message to log
    */
   public static void warn(String message) {
@@ -108,6 +119,8 @@ public inherited sharing class Logger {
   // ─── Debug helpers (gated by printLogs) ──────────────────────────────────────
 
   /**
+   * @description Logs a debug-level message with class/method context; gated by
+   *              the printLogs flag.
    * @param message The message to log
    * @param className The name of the class where the log is generated
    * @param methodName The name of the method where the log is generated
@@ -123,6 +136,7 @@ public inherited sharing class Logger {
   }
 
   /**
+   * @description Logs a debug-level message; gated by the printLogs flag.
    * @param message The message to log
    */
   public static void debug(String message) {
@@ -132,6 +146,8 @@ public inherited sharing class Logger {
   }
 
   /**
+   * @description Logs a debug-level message plus a pretty-JSON rendering of the
+   *              supplied object; gated by the printLogs flag.
    * @param message The message to log
    * @param objectToParse Object to serialize as pretty JSON alongside the message
    * @param className The name of the class where the log is generated
@@ -152,6 +168,9 @@ public inherited sharing class Logger {
   // ─── Exception logging ────────────────────────────────────────────────────────
 
   /**
+   * @description Logs an exception at error severity — type name, message, and
+   *              stack trace — and persists it to the durable sink. Never gated
+   *              by the printLogs flag.
    * @param e The exception to log
    * @param className The name of the class where the log is generated
    * @param methodName The name of the method where the log is generated
@@ -166,6 +185,8 @@ public inherited sharing class Logger {
 
   // ─── Private helpers ──────────────────────────────────────────────────────────
 
+  // Mirrors the four-argument public debug overload it backs; the class/method context pair does not decompose.
+  @SuppressWarnings('PMD.ExcessiveParameterList')
   private static void logDebugWithObject(
     String message,
     Object objectToParse,
@@ -231,6 +252,9 @@ public inherited sharing class Logger {
   // ─── Infrastructure ───────────────────────────────────────────────────────────
 
   /**
+   * @description Lazily-resolved flag gating debug-level output, driven by the
+   *              `Log_Setting__mdt` 'defaults' record; defaults to true when no
+   *              record exists.
    * @return True if debug output is enabled (driven by Log_Setting__mdt)
    */
   @TestVisible
@@ -246,6 +270,7 @@ public inherited sharing class Logger {
   }
 
   /**
+   * @description Builds the timestamped, level- and context-prefixed log line.
    * @param level The logging level
    * @param message The message to log
    * @param className The class name

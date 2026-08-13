@@ -16,7 +16,7 @@
  * @author David Wood
  * @since July 2024
  * @last May 2026 — conformance refactor
- * @last August 2026 — removed the never-thrown module exception; recursion-depth contract stated precisely
+ * @last August 2026 — removed the never-thrown module exception; recursion-depth contract stated precisely; analyzer conformance
  */
 public without sharing class GroupMemberEmailRetriever {
   // Nested groups are followed up to this many levels below the directly-addressed
@@ -64,6 +64,7 @@ public without sharing class GroupMemberEmailRetriever {
   }
 
   /**
+   * @description Looks up Group IDs by developer name; names with no matching Group are ignored.
    * @param groupNames Developer names of the Groups to look up.
    * @return Set<Id> IDs of the matching Groups.
    */
@@ -81,6 +82,7 @@ public without sharing class GroupMemberEmailRetriever {
   }
 
   /**
+   * @description Fetches the Email field for the given Users.
    * @param userIds IDs of the Users whose emails are needed.
    * @return Set<String> Email addresses for the provided User IDs.
    */
@@ -98,6 +100,8 @@ public without sharing class GroupMemberEmailRetriever {
   }
 
   /**
+   * @description Walks one level of group membership — collects User members and recurses into
+   *              unvisited nested groups until the depth guard trips.
    * @param groupIds Group IDs to process at this recursion level.
    * @param currentDepth Current recursion depth — 0 for the directly-addressed groups, so the
    *        guard admits depths 0 through MAX_RECURSION_DEPTH (six group levels in total).

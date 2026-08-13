@@ -6,7 +6,8 @@
  * @author David Wood
  * @since July 2024
  * @last May 2026 — conformance refactor
- * @last August 2026 — direct coverage for the SOAP and Bulk API helper checks
+ * @last August 2026 — direct coverage for the SOAP and Bulk API helper checks;
+ *       analyzer conformance (TRUSTED_QUIDDITIES rename follow-through)
  */
 @isTest
 private without sharing class QuiddityGuardTest {
@@ -22,7 +23,7 @@ private without sharing class QuiddityGuardTest {
 
       // Test with a quiddity that should be in the trusted list
       Assert.isTrue(
-        QuiddityGuard.isAcceptableQuiddity(QuiddityGuard.trustedQuiddities),
+        QuiddityGuard.isAcceptableQuiddity(QuiddityGuard.TRUSTED_QUIDDITIES),
         'Expected a current quiddity to be in the Trusted Quiddities list'
       );
 
@@ -61,7 +62,7 @@ private without sharing class QuiddityGuardTest {
 
       // Test with a quiddity that should not be in the trusted list
       Assert.isFalse(
-        QuiddityGuard.isAcceptableQuiddity(QuiddityGuard.trustedQuiddities),
+        QuiddityGuard.isAcceptableQuiddity(QuiddityGuard.TRUSTED_QUIDDITIES),
         'Expected Future quiddity to not be in trusted quiddities list'
       );
 
@@ -146,7 +147,7 @@ private without sharing class QuiddityGuardTest {
           'Expected Future quiddity to be acceptable'
         );
         QuiddityGuard.isAcceptableQuiddity(
-          QuiddityGuard.trustedQuiddities,
+          QuiddityGuard.TRUSTED_QUIDDITIES,
           true
         );
         Assert.fail(

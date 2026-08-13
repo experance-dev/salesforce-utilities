@@ -4,7 +4,8 @@
  * @author David Wood
  * @since June 2024
  * @last May 2026 — conformance refactor
- * @last August 2026 — null-safe describe lookup for unknown sObject names
+ * @last August 2026 — null-safe describe lookup for unknown sObject names; analyzer
+ *                     conformance (deferred describe)
  */
 // without sharing: pure Schema.describe metadata operations; no record data access.
 public without sharing class UtilPickLists {
@@ -48,7 +49,9 @@ public without sharing class UtilPickLists {
     if (sObjectType == null) {
       return new List<String>();
     }
-    Schema.SObjectField sObjectField = sObjectType.getDescribe()
+    Schema.SObjectField sObjectField = sObjectType.getDescribe(
+        SObjectDescribeOptions.DEFERRED
+      )
       .fields.getMap()
       .get(fieldName);
     return getPickListValues(sObjectField);
