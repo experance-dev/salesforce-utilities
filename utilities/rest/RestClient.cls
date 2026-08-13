@@ -20,14 +20,18 @@
  *                  Logger.logException wrapping.
  * @last August 2026 — rewrite: named-credential-only construction,
  *                     per-instance default headers, native PATCH, value-only
- *                     query encoding, configurable timeout, sanitized errors.
+ *                     query encoding, configurable timeout, sanitized errors;
+ *                     analyzer conformance.
  */
 public with sharing virtual class RestClient {
   private static final Integer DEFAULT_TIMEOUT_MILLIS = 120000;
 
-  /** The Named Credential every request on this instance routes through. */
-  @testVisible
-  protected String namedCredentialName { get; set; }
+  // Verbs whose requests carry a body; GET/HEAD/DEL never set one.
+  private static final Set<HttpVerb> BODY_VERBS = new Set<HttpVerb>{
+    HttpVerb.POST,
+    HttpVerb.PUT,
+    HttpVerb.PATCH
+  };
 
   /**
    * Per-instance default headers, applied when a call site passes none.
@@ -44,12 +48,12 @@ public with sharing virtual class RestClient {
   @testVisible
   protected Integer timeoutMillis = DEFAULT_TIMEOUT_MILLIS;
 
-  // Verbs whose requests carry a body; GET/HEAD/DEL never set one.
-  private static final Set<HttpVerb> BODY_VERBS = new Set<HttpVerb>{
-    HttpVerb.POST,
-    HttpVerb.PUT,
-    HttpVerb.PATCH
-  };
+  /**
+   * @description The Named Credential every request on this instance routes
+   *              through.
+   */
+  @testVisible
+  protected String namedCredentialName { get; set; }
 
   /**
    * @description Thrown for every failed callout. The message carries only
@@ -272,11 +276,12 @@ public with sharing virtual class RestClient {
   }
 
   /**
-   * URL-encodes query parameter values only — never keys and never the
-   * `?`/`=`/`&` structure — so a space or reserved character inside a value
-   * is escaped while the query string stays parseable. A value containing
-   * `=` (a URL, say) is encoded whole: only the first `=` in each pair
-   * separates key from value.
+   * @description URL-encodes query parameter values only — never keys and
+   *              never the `?`/`=`/`&` structure — so a space or reserved
+   *              character inside a value is escaped while the query string
+   *              stays parseable. A value containing `=` (a URL, say) is
+   *              encoded whole: only the first `=` in each pair separates
+   *              key from value.
    * @param query Query string, with or without a leading `?`.
    * @return      `?key=encodedValue&...`, or an empty string for blank input.
    */

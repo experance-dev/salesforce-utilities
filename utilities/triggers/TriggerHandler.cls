@@ -26,8 +26,11 @@
  * @since July 2024
  * @last May 2026 — conformance refactor: sharing modifier, header, exception hierarchy,
  *                  run() decomposition, @TestVisible capitalisation, clearCache() stub.
- * @last August 2026 — hook-contract ApexDoc; static initializer delegates to clearCache().
+ * @last August 2026 — hook-contract ApexDoc; static initializer delegates to clearCache();
+ *                     analyzer conformance (doc tags, class complexity waiver).
  */
+// Waiver: class-total cyclomatic complexity is inherent to the upstream dispatcher's per-context switch fan-out (highest single method is 7); decomposition would diverge from the Kevin O'Hara lineage for no readability gain.
+@SuppressWarnings('PMD.CyclomaticComplexity')
 public virtual without sharing class TriggerHandler {
   // Static loop-count and bypass registries.
   // DEFERRED: should move to session platform cache (see class header).
@@ -55,6 +58,9 @@ public virtual without sharing class TriggerHandler {
   public class TriggerHandlerException extends UtilitiesModuleException {
   }
 
+  /**
+   * @description Constructs the handler and resolves the trigger context for this execution.
+   */
   public TriggerHandler() {
     this.setTriggerContext();
   }
@@ -62,9 +68,9 @@ public virtual without sharing class TriggerHandler {
   // ─── Public API (frozen) ──────────────────────────────────────────────────────
 
   /**
-   * Main entry point called by the trigger body. Validates context, enforces
-   * the loop-count ceiling, dispatches to the appropriate hook method, then
-   * calls `andFinally`.
+   * @description Main entry point called by the trigger body. Validates context,
+   *              enforces the loop-count ceiling, dispatches to the appropriate
+   *              hook method, then calls `andFinally`.
    */
   public virtual void run() {
     if (!validateRun()) {
@@ -76,8 +82,8 @@ public virtual without sharing class TriggerHandler {
   }
 
   /**
-   * Prevents infinite trigger recursion by capping the number of times this
-   * handler may fire in a single transaction.
+   * @description Prevents infinite trigger recursion by capping the number of
+   *              times this handler may fire in a single transaction.
    * @param max Maximum allowed executions (use 1 to allow exactly one run).
    */
   public void setMaxLoopCount(Integer max) {
@@ -89,13 +95,15 @@ public virtual without sharing class TriggerHandler {
     }
   }
 
-  /** Removes the loop-count ceiling for this handler. */
+  /**
+   * @description Removes the loop-count ceiling for this handler.
+   */
   public void clearMaxLoopCount() {
     this.setMaxLoopCount(-1);
   }
 
   /**
-   * Prevents the named handler from firing for the remainder of this transaction.
+   * @description Prevents the named handler from firing for the remainder of this transaction.
    * @param handlerName Apex class name of the handler to suppress.
    */
   public static void bypass(String handlerName) {
@@ -103,7 +111,7 @@ public virtual without sharing class TriggerHandler {
   }
 
   /**
-   * Re-enables a previously bypassed handler.
+   * @description Re-enables a previously bypassed handler.
    * @param handlerName Apex class name to remove from the bypass set.
    */
   public static void clearBypass(String handlerName) {
@@ -111,6 +119,7 @@ public virtual without sharing class TriggerHandler {
   }
 
   /**
+   * @description Reports whether the named handler is currently suppressed.
    * @param handlerName Apex class name to check.
    * @return `Boolean` — true if the handler is currently suppressed.
    */
@@ -118,7 +127,9 @@ public virtual without sharing class TriggerHandler {
     return TriggerHandler.bypassedHandlers.contains(handlerName);
   }
 
-  /** Removes all handlers from the bypass set. */
+  /**
+   * @description Removes all handlers from the bypass set.
+   */
   public static void clearAllBypasses() {
     TriggerHandler.bypassedHandlers.clear();
   }
@@ -126,9 +137,9 @@ public virtual without sharing class TriggerHandler {
   // ─── Test support ─────────────────────────────────────────────────────────────
 
   /**
-   * Resets static state between test methods.
-   * NOTE: TODO: when platform-cache migration lands, update this method to
-   * also flush the relevant cache partition keys.
+   * @description Resets static state between test methods.
+   *              TODO: when platform-cache migration lands, update this method to
+   *              also flush the relevant cache partition keys.
    */
   @TestVisible
   static void clearCache() {
@@ -144,6 +155,8 @@ public virtual without sharing class TriggerHandler {
   }
 
   /**
+   * @description Resolves the trigger context from the live Trigger state, or from
+   *              the supplied token when running in test mode.
    * @param ctx      String trigger-context token used in test mode.
    * @param testMode When true, `ctx` drives the context instead of Trigger.*
    */
@@ -162,7 +175,11 @@ public virtual without sharing class TriggerHandler {
     }
   }
 
-  /** Maps the platform TriggerOperation enum to our TriggerContext enum. */
+  /**
+   * @description Maps the platform TriggerOperation enum to our TriggerContext enum.
+   * @param opType Platform operation type reported by the runtime.
+   * @return `TriggerContext` matching the operation, or null when unrecognised.
+   */
   private static TriggerContext contextFromOperationType(
     System.TriggerOperation opType
   ) {
@@ -194,7 +211,11 @@ public virtual without sharing class TriggerHandler {
     }
   }
 
-  /** Maps a test-mode string token to TriggerContext; throws on unrecognised input. */
+  /**
+   * @description Maps a test-mode string token to TriggerContext; throws on unrecognised input.
+   * @param ctx Test-mode context token, e.g. 'before insert'.
+   * @return `TriggerContext` matching the token.
+   */
   private static TriggerContext contextFromString(String ctx) {
     switch on ctx {
       when 'before insert' {
@@ -226,7 +247,9 @@ public virtual without sharing class TriggerHandler {
     }
   }
 
-  /** Dispatches to the virtual hook matching the current context. */
+  /**
+   * @description Dispatches to the virtual hook matching the current context.
+   */
   private void dispatchToHook() {
     switch on context {
       when BEFORE_INSERT {
@@ -254,7 +277,7 @@ public virtual without sharing class TriggerHandler {
   }
 
   /**
-   * Increments the run counter for this handler and throws if the ceiling is exceeded.
+   * @description Increments the run counter for this handler and throws if the ceiling is exceeded.
    */
   @TestVisible
   protected void addToLoopCount() {
@@ -271,6 +294,7 @@ public virtual without sharing class TriggerHandler {
   }
 
   /**
+   * @description Confirms the handler may run in the current context.
    * @return `Boolean` false when this handler is bypassed; throws when called
    *         outside a trigger execution.
    */
@@ -288,6 +312,7 @@ public virtual without sharing class TriggerHandler {
   }
 
   /**
+   * @description Derives the concrete subclass name used to key the loop-count and bypass registries.
    * @return `String` simple class name of the concrete handler subclass.
    */
   @TestVisible
@@ -382,19 +407,24 @@ public virtual without sharing class TriggerHandler {
 
   // ─── Inner classes ────────────────────────────────────────────────────────────
 
-  /** Tracks per-handler run counts and enforces an optional ceiling. */
+  /**
+   * @description Tracks per-handler run counts and enforces an optional ceiling.
+   */
   @TestVisible
   private class LoopCount {
     private Integer max;
     private Integer count;
 
-    /** Initialises with a default ceiling of 5. */
+    /**
+     * @description Initialises with a default ceiling of 5.
+     */
     public LoopCount() {
       this.max = 5;
       this.count = 0;
     }
 
     /**
+     * @description Initialises with the supplied ceiling.
      * @param max Maximum allowed runs.
      */
     public LoopCount(Integer max) {
@@ -403,8 +433,8 @@ public virtual without sharing class TriggerHandler {
     }
 
     /**
-     * Increments the counter and returns whether the ceiling has been breached.
-     * @return `Boolean`
+     * @description Increments the counter and returns whether the ceiling has been breached.
+     * @return `Boolean` true when the ceiling has been breached.
      */
     public Boolean increment() {
       this.count++;
@@ -412,6 +442,7 @@ public virtual without sharing class TriggerHandler {
     }
 
     /**
+     * @description Compares the run count against the ceiling.
      * @return `Boolean` true when count exceeds max (max < 0 means unlimited).
      */
     public Boolean exceeded() {
@@ -421,17 +452,26 @@ public virtual without sharing class TriggerHandler {
       return this.count > this.max;
     }
 
-    /** @return `Integer` configured maximum. */
+    /**
+     * @description Reads the configured ceiling.
+     * @return `Integer` configured maximum.
+     */
     public Integer getMax() {
       return this.max;
     }
 
-    /** @return `Integer` current run count. */
+    /**
+     * @description Reads the current run count.
+     * @return `Integer` current run count.
+     */
     public Integer getCount() {
       return this.count;
     }
 
-    /** @param max New ceiling value. */
+    /**
+     * @description Replaces the ceiling.
+     * @param max New ceiling value.
+     */
     public void setMax(Integer max) {
       this.max = max;
     }

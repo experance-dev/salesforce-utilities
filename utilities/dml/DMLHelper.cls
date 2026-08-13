@@ -6,10 +6,11 @@
  * @author David Wood
  * @since May 2024
  * @last May 2026 — USER_MODE migration; conformance refactor
- * @last August 2026 — explicit system-mode read in getExistingRecords; empty-list guard on merge CRUD check
+ * @last August 2026 — explicit system-mode read in getExistingRecords; empty-list guard on merge CRUD check; analyzer conformance
  * @see DMLManager
  */
-@SuppressWarnings('PMD.ExcessivePublicCount')
+// PMD waiver per standards/static-analysis.md §3.6: aggregates the narrow per-operation FLS checks; per-method budgets satisfied (highest 9)
+@SuppressWarnings('PMD.ExcessivePublicCount, PMD.CyclomaticComplexity')
 public inherited sharing class DMLHelper {
   /**
    * @description Extracts the populated fields of a record as a name-to-value map.
@@ -26,7 +27,7 @@ public inherited sharing class DMLHelper {
    */
   public static void checkCreateAction(List<SObject> objList) {
     for (SObject obj : objList) {
-      List<String> restrictedFields = DMLManager.cachedRestrictedFields.get(
+      List<String> restrictedFields = DMLManager.CACHED_RESTRICTED_FIELDS.get(
           DMLManager.Operation.OP_INSERT
         )
         .get(obj.getSObjectType());
@@ -74,7 +75,7 @@ public inherited sharing class DMLHelper {
    * @param existingRecord The current database state of the record.
    */
   public static void checkUpdateAction(SObject obj, SObject existingRecord) {
-    List<String> restrictedFields = DMLManager.cachedRestrictedFields.get(
+    List<String> restrictedFields = DMLManager.CACHED_RESTRICTED_FIELDS.get(
         DMLManager.Operation.OP_UPDATE
       )
       .get(obj.getSObjectType());
@@ -114,7 +115,7 @@ public inherited sharing class DMLHelper {
     Map<SObjectType, List<Id>> objTypeMap
   ) {
     Map<Id, SObject> result = new Map<Id, SObject>();
-    Map<SObjectType, List<String>> operationRestrictedFields = DMLManager.cachedRestrictedFields.get(
+    Map<SObjectType, List<String>> operationRestrictedFields = DMLManager.CACHED_RESTRICTED_FIELDS.get(
       DMLManager.Operation.OP_UPDATE
     );
 
@@ -205,12 +206,12 @@ public inherited sharing class DMLHelper {
     SObject obj,
     DMLManager.Operation dmlOperation
   ) {
-    Map<SObjectType, List<String>> operationRestrictedFields = DMLManager.cachedRestrictedFields.get(
+    Map<SObjectType, List<String>> operationRestrictedFields = DMLManager.CACHED_RESTRICTED_FIELDS.get(
       dmlOperation
     );
     if (operationRestrictedFields == null) {
       operationRestrictedFields = new Map<SObjectType, List<String>>();
-      DMLManager.cachedRestrictedFields.put(dmlOperation, operationRestrictedFields);
+      DMLManager.CACHED_RESTRICTED_FIELDS.put(dmlOperation, operationRestrictedFields);
     }
 
     if (operationRestrictedFields.containsKey(obj.getSObjectType())) {
@@ -222,7 +223,7 @@ public inherited sharing class DMLHelper {
     List<String> restrictedFields = new List<String>();
 
     for (String nm : objectFields.keySet()) {
-      if (!DMLManager.exceptionValues.contains(nm.toLowerCase())) {
+      if (!DMLManager.EXCEPTION_VALUES.contains(nm.toLowerCase())) {
         DescribeFieldResult fr = objectFields.get(nm).getDescribe();
         if (isRestrictedField(fr, dmlOperation)) {
           restrictedFields.add(fr.getName());

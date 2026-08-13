@@ -30,10 +30,11 @@
  * @author David Wood
  * @since May 2024
  * @last May 2026 — USER_MODE migration; DMLManagerException now extends UtilitiesModuleException
- * @last August 2026 — per-instance AccessLevel in SimpleDML (AsSystem statics now genuinely elevate);
- *                      explicit AccessLevel on merge; hardened DMLHelper-only cache contract; ApexDoc completion
+ * @last August 2026 — per-instance AccessLevel in SimpleDML (AsSystem statics now genuinely elevate); explicit
+ *                      AccessLevel on merge; hardened DMLHelper-only cache contract; ApexDoc completion; analyzer conformance
  */
-@SuppressWarnings('PMD.ExcessivePublicCount')
+// PMD waiver per standards/static-analysis.md §3.6: facade aggregates ~20 narrow DML overloads; per-method budgets satisfied (highest 5)
+@SuppressWarnings('PMD.ExcessivePublicCount, PMD.CyclomaticComplexity')
 public inherited sharing class DMLManager {
   // Swap this out in tests to inject mock or error-simulation DML behaviour.
   private static IDML dmlOperations = new SimpleDML();
@@ -44,7 +45,7 @@ public inherited sharing class DMLManager {
    *              Contract: read by DMLHelper only — no other consumer may reference or mutate it.
    *              The reference is final; the set contents are the fixed platform-audit field list.
    */
-  public static final Set<String> exceptionValues = new Set<String>{
+  public static final Set<String> EXCEPTION_VALUES = new Set<String>{
     'id',
     'isdeleted',
     'createddate',
@@ -59,7 +60,7 @@ public inherited sharing class DMLManager {
    *              Contract: populated and read by DMLHelper only — no other consumer may touch it.
    *              The reference is final; DMLHelper owns all mutation of the cached contents.
    */
-  public static final Map<Operation, Map<SObjectType, List<String>>> cachedRestrictedFields = new Map<Operation, Map<SObjectType, List<String>>>();
+  public static final Map<Operation, Map<SObjectType, List<String>>> CACHED_RESTRICTED_FIELDS = new Map<Operation, Map<SObjectType, List<String>>>();
 
   /** @description Supported DML operations. */
   public enum Operation {
@@ -248,7 +249,10 @@ public inherited sharing class DMLManager {
    *              so callers can catch the whole utilities layer with one handler.
    */
   public virtual class DMLManagerException extends UtilitiesModuleException {
+    /** @description The SObjectType involved in the failed operation. */
     public SObjectType objType { get; private set; }
+
+    /** @description The DML operation that was denied. */
     public Operation op { get; private set; }
   }
 
@@ -268,6 +272,7 @@ public inherited sharing class DMLManager {
 
   /** @description Thrown when the running user lacks FLS permission for a specific field. */
   public class FLSException extends DMLManagerException {
+    /** @description The specific field the running user may not write. */
     public SObjectField field { get; private set; }
 
     /**

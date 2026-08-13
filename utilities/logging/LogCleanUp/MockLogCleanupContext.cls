@@ -5,6 +5,7 @@
  * @author David Wood
  * @since November 2024
  * @last May 2026 — conformance refactor: explicit sharing, header cleanup.
+ * @last August 2026 — analyzer conformance: ApexDoc normalized on the override.
  */
 @IsTest
 public without sharing class MockLogCleanupContext extends LogCleanupContext {
@@ -19,7 +20,11 @@ public without sharing class MockLogCleanupContext extends LogCleanupContext {
     this.mockRetentionDays = mockRetentionDays;
   }
 
-  /** @return The retention map supplied at construction time. */
+  /**
+   * @description Returns the caller-supplied retention map instead of reading
+   *              custom metadata.
+   * @return The retention map supplied at construction time.
+   */
   public override Map<String, Integer> getLogRetentionDays() {
     return mockRetentionDays;
   }

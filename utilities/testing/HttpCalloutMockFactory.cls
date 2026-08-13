@@ -18,7 +18,7 @@
  * @since March 2024
  * @last May 2026 — conformance refactor
  * @last August 2026 — request capture list; defensive copy of the
- *                     ordered-response queue.
+ *                     ordered-response queue; analyzer conformance.
  */
 @isTest
 public without sharing class HttpCalloutMockFactory implements HttpCalloutMock {
@@ -107,5 +107,6 @@ public without sharing class HttpCalloutMockFactory implements HttpCalloutMock {
     return res;
   }
 
+  /** @description Thrown when a callout arrives after the mock's response queue is exhausted. */
   public class HttpCalloutMockException extends UtilitiesModuleException {}
 }

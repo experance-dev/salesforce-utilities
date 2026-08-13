@@ -9,16 +9,22 @@
  * @author David Wood
  * @since August 2024
  * @last May 2026 — conformance refactor
- * @last August 2026 — CSV escaping; String.format removed from value assembly; inherited sharing
+ * @last August 2026 — CSV escaping; String.format removed from value assembly; inherited sharing;
+ *                     analyzer conformance
  */
 // inherited sharing: pure in-memory string assembly; no SOQL, DML, or record data access.
+// CognitiveComplexity waiver: the class-total score (57) is the sum of many trivial methods
+// (highest single method scores 3) across the builder hierarchy; nothing decomposes further.
+@SuppressWarnings('PMD.CognitiveComplexity')
 public virtual inherited sharing class StringBuilder {
   protected String stringValue;
 
   /**
    * @description Creates an empty builder.
    */
+  @SuppressWarnings('PMD.EmptyStatementBlock') // required-but-empty: no-arg construction is part of the public API
   public StringBuilder() {
+    // Intentionally empty: a new builder starts with no accumulated value.
   }
 
   /**
@@ -90,7 +96,9 @@ public virtual inherited sharing class StringBuilder {
     /**
      * @description Creates an empty CSV builder.
      */
+    @SuppressWarnings('PMD.EmptyStatementBlock') // required-but-empty: csvValues must lazy-init in add() (base-ctor dispatch order)
     public CSVBuilder() {
+      // Intentionally empty: csvValues is lazily initialized in add(String).
     }
 
     /**

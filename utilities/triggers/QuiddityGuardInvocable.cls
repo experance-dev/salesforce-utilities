@@ -12,10 +12,14 @@
  * @author  David Wood
  * @since   June 2024
  * @last    May 2026 — conformance refactor
- * @last    August 2026 — inherited sharing with documented rationale
+ * @last    August 2026 — inherited sharing with documented rationale; analyzer conformance (doc tags)
  */
 public inherited sharing class QuiddityGuardInvocable {
-  /** @return Single-element list indicating whether the current quiddity is an API context. */
+  /**
+   * @description Invocable entry point for Flows: reports whether the current
+   *              transaction arrived through an inbound API channel (REST / SOAP / Bulk API).
+   * @return Single-element list indicating whether the current quiddity is an API context.
+   */
   @InvocableMethod(label='Check Transaction is from APIs')
   public static List<Boolean> invocableIsApiQuiddity() {
     return new List<Boolean>{ QuiddityGuard.isApiQuiddity() };

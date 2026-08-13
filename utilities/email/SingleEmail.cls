@@ -4,7 +4,7 @@
  * Assembly and dispatch are separate steps: `buildEmail()` returns the fully-populated
  * `Messaging.SingleEmailMessage` without sending it, and `sendMail()` hands that message to an
  * injectable `IEmailDispatcher` seam whose production implementation reserves capacity and calls
- * `Messaging.sendEmail`. Tests inject a capturing fake through the `@TestVisible` dispatcher field,
+ * `Messaging.sendEmail`. Tests inject a capturing mock through the `@TestVisible` dispatcher field,
  * so no test path ever dispatches real email.
  *
  * Sender display name resolution: the per-message `senderDisplayName` property wins when set;
@@ -20,12 +20,37 @@
  * @since   April 2024
  * @last    May 2026 — conformance refactor: explicit sharing, Logger, SingleEmailException, header cleanup
  * @last    August 2026 — build/dispatch split: buildEmail() returns the message, injectable dispatcher seam
- *                        returning library-owned SendResult, sanitized rethrow, org-default sender fallback
+ *                        returning library-owned SendResult, sanitized rethrow, org-default sender fallback; analyzer conformance
  */
 public with sharing class SingleEmail {
+  // ─── Fields ─────────────────────────────────────────────────────────────────
+
+  // Dispatch seam instance — production implementation by default; tests inject a
+  // capturing mock through the @TestVisible seam so nothing is ever really sent.
+  @TestVisible
+  private static IEmailDispatcher dispatcher = new EmailDispatcherImpl();
+
+  /**
+   * Fallback sender display name applied when a message's own `senderDisplayName` is unset.
+   * Null (the default) leaves the sender display name off the message entirely, so the org
+   * default applies. Set once per org (or per transaction) to brand outbound mail.
+   */
+  @TestVisible
+  private static String defaultSenderDisplayName = null;
+
+  public List<String> toAddresses;
+  public List<String> ccAddresses;
+  public List<String> bccAddresses;
+  public String senderDisplayName;
+  public String replyTo;
+  public String subject;
+  public String plainBody;
+  public String htmlBody;
+  public Boolean allOrNone;
+
   // ─── Inner exception ────────────────────────────────────────────────────────
 
-  /** Custom exception for SingleEmail errors. */
+  /** @description Custom exception for SingleEmail errors. */
   public class SingleEmailException extends UtilitiesModuleException {}
 
   // ─── Dispatcher seam ────────────────────────────────────────────────────────
@@ -34,7 +59,7 @@ public with sharing class SingleEmail {
    * @description Library-owned per-message send outcome. The platform's
    *              `Messaging.SendEmailResult` has no public constructor, so a seam typed
    *              on it can never fabricate a failure in a test; this wrapper is freely
-   *              constructible, which is the entire point — fakes can script any reply
+   *              constructible, which is the entire point — mocks can script any reply
    *              (success, partial failure, capacity error) and the failure branch stays
    *              testable.
    */
@@ -57,7 +82,7 @@ public with sharing class SingleEmail {
 
   /**
    * @description Dispatch seam for outbound email. The production implementation calls
-   *              `Messaging.sendEmail`; tests inject a capturing fake so nothing is sent
+   *              `Messaging.sendEmail`; tests inject a capturing mock so nothing is sent
    *              and any reply can be scripted via `SendResult`.
    */
   public interface IEmailDispatcher {
@@ -113,33 +138,11 @@ public with sharing class SingleEmail {
     }
   }
 
-  @TestVisible
-  private static IEmailDispatcher dispatcher = new EmailDispatcherImpl();
-
-  // ─── Defaults ───────────────────────────────────────────────────────────────
-
-  /**
-   * Fallback sender display name applied when a message's own `senderDisplayName` is unset.
-   * Null (the default) leaves the sender display name off the message entirely, so the org
-   * default applies. Set once per org (or per transaction) to brand outbound mail.
-   */
-  @TestVisible
-  private static String defaultSenderDisplayName = null;
-
-  // ─── Public properties ──────────────────────────────────────────────────────
-
-  public List<String> toAddresses;
-  public List<String> ccAddresses;
-  public List<String> bccAddresses;
-  public String senderDisplayName;
-  public String replyTo;
-  public String subject;
-  public String plainBody;
-  public String htmlBody;
-  public Boolean allOrNone;
-
   // ─── Constructors ───────────────────────────────────────────────────────────
 
+  /**
+   * @description Creates an empty email: recipient lists initialized, `allOrNone` false.
+   */
   public SingleEmail() {
     this.toAddresses = new List<String>();
     this.ccAddresses = new List<String>();
@@ -148,6 +151,7 @@ public with sharing class SingleEmail {
   }
 
   /**
+   * @description Convenience constructor for the common single-recipient plain-text case.
    * @param toAddress The email address of the recipient.
    * @param subject   The subject of the email.
    * @param plainBody The plain text body of the email.
@@ -234,7 +238,7 @@ public with sharing class SingleEmail {
   // ─── Private helpers ────────────────────────────────────────────────────────
 
   /**
-   * Inspects send results and logs individual failures.
+   * @description Inspects send results and logs individual failures.
    * @param results One `SendResult` per dispatched message.
    * @return `true` if all results succeeded (or results is empty).
    */

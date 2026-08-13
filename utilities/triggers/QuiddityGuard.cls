@@ -11,7 +11,8 @@
  * @author  Apex Recipes, David Wood
  * @since   June 2024
  * @last    May 2026 — conformance refactor
- * @last    August 2026 — trust-list contract hardening: final lists, inherited sharing, @throws doc
+ * @last    August 2026 — trust-list contract hardening: final lists, inherited sharing,
+ *          @throws doc; analyzer conformance (constant naming, doc tags)
  */
 public inherited sharing class QuiddityGuard {
   /**
@@ -32,7 +33,7 @@ public inherited sharing class QuiddityGuard {
    * transaction. Tests that need the guard to see a different quiddity use the
    * `@TestVisible testQuiddityOverride` seam, not list mutation.
    */
-  public static final List<Quiddity> trustedQuiddities = new List<Quiddity>{
+  public static final List<Quiddity> TRUSTED_QUIDDITIES = new List<Quiddity>{
     Quiddity.SYNCHRONOUS,
     Quiddity.QUEUEABLE,
     Quiddity.BATCH_APEX,
@@ -43,9 +44,9 @@ public inherited sharing class QuiddityGuard {
 
   /**
    * Exhaustive list of quiddities that indicate a test execution.
-   * Read-only by contract — see the trust contract on `trustedQuiddities`.
+   * Read-only by contract — see the trust contract on `TRUSTED_QUIDDITIES`.
    */
-  public static final List<Quiddity> trustedTestQuiddities = new List<Quiddity>{
+  public static final List<Quiddity> TRUSTED_TEST_QUIDDITIES = new List<Quiddity>{
     Quiddity.RUNTEST_SYNC,
     Quiddity.RUNTEST_ASYNC,
     Quiddity.RUNTEST_DEPLOY
@@ -53,9 +54,9 @@ public inherited sharing class QuiddityGuard {
 
   /**
    * Quiddities that may carry user-defined data; require FLS/CRUD checks before trusting.
-   * Read-only by contract — see the trust contract on `trustedQuiddities`.
+   * Read-only by contract — see the trust contract on `TRUSTED_QUIDDITIES`.
    */
-  public static final List<Quiddity> untrustedQuiddities = new List<Quiddity>{
+  public static final List<Quiddity> UNTRUSTED_QUIDDITIES = new List<Quiddity>{
     Quiddity.AURA,
     Quiddity.DISCOVERABLE_LOGIN,
     Quiddity.INBOUND_EMAIL_SERVICE,
@@ -162,7 +163,9 @@ public inherited sharing class QuiddityGuard {
 
   // ─── Exceptions ─────────────────────────────────────────────────────────────
 
-  /** Thrown when a quiddity check fails and the caller requests an exception. */
+  /**
+   * @description Thrown when a quiddity check fails and the caller requests an exception.
+   */
   public class AccessException extends UtilitiesModuleException {
   }
 }

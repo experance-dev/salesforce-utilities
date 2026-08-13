@@ -6,7 +6,8 @@
  * @author David Wood
  * @since December 2020
  * @last May 2026 — conformance refactor: sharing modifier, SYSTEM_MODE DML, exception base, header normalisation
- * @last August 2026 — createTestUser permission sets injectable via testUserPermissionSets; duplicate record-type helper removed (Utilities keeps the canonical one)
+ * @last August 2026 — createTestUser permission sets injectable via testUserPermissionSets; duplicate
+ *                      record-type helper removed (Utilities keeps the canonical one); analyzer conformance
  */
 @IsTest
 @SuppressWarnings(
@@ -444,7 +445,10 @@ public without sharing class TestFactory {
 
   /** @description Implement this interface in any inner class of TestFactoryDefaults to supply field defaults. */
   public interface FieldDefaults {
-    /** @return Map of SObjectField to default value. */
+    /**
+     * @description Supplies the default field values applied to a newly built record of one SObject type.
+     * @return Map of SObjectField to default value.
+     */
     Map<Schema.SObjectField, Object> getFieldDefaults();
   }
 
