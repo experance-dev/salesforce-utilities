@@ -2,6 +2,10 @@
 
 All notable changes to this library are documented here. One entry per released version; the library versions as a whole (git tags, semver) — individual classes carry their own `@since`/`@last` narrative in their headers.
 
+## v1.1.0 — 2026-08-13
+
+- **PersonaMatrix** — persona-matrix security testing module under [utilities/testing/persona/](utilities/testing/persona/): declare a scenario once, run it as every persona it touches, with per-persona expected outcomes (`allowed()`, `returnedRows`, `seesNoRows()`, `denied(...)`, `custom(...)`) collected into one aggregate failure ledger instead of stopping at the first mismatch. Ships `PersonaMatrix`, `Persona`/`PersonaBuilder`, `PersonaScenario`/`PersonaContext`, `PersonaOutcome`, `PersonaMatrixResult`, and the portable `PersonaDefaults` sample registry; design in [docs/design/persona-matrix-testing.md](docs/design/persona-matrix-testing.md). Additive — no breaking changes.
+
 ## v1.0.0 — 2026-08-13
 
 First public release.

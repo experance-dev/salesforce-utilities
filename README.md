@@ -12,6 +12,7 @@ Reusable Apex utility classes for the Salesforce platform — DML, logging, trig
 | [utilities/triggers/](utilities/triggers/) | `TriggerHandler` — one-trigger-per-object framework. `QuiddityGuard` / `QuiddityGuardInvocable` — execution-context gating. |
 | [utilities/logging/](utilities/logging/) | `Logger` — error-severity entries persist to the shipped `Debug_Log__c` object; [`LogCleanUp/`](utilities/logging/LogCleanUp/) — CMDT-driven, batchable log retention that survives a stuck record. |
 | [utilities/testing/](utilities/testing/) | `TestFactory` + `TestFactoryDefaults` — portable test-data factory (standard objects only; extend per org); `TestDouble` — stub framework; `HttpCalloutMockFactory` — request-capturing callout mock. |
+| [utilities/testing/persona/](utilities/testing/persona/) | `PersonaMatrix` + `Persona`/`PersonaBuilder`/`PersonaOutcome` — persona-matrix security testing: one scenario run as every persona with per-persona expected outcomes and one aggregate failure ledger; `PersonaDefaults` — portable sample personas. |
 | [utilities/rest/](utilities/rest/) | `RestClient` — named-credential-only HTTP client: per-instance headers, native PATCH, explicit timeouts, sanitized errors. |
 | [utilities/email/](utilities/email/) | `SingleEmail` — build/dispatch split with a mockable result seam; `GroupMemberEmailRetriever`. |
 | [utilities/strings/](utilities/strings/) | `StringBuilder` — string, field-list, and CSV assembly with real escaping. |
@@ -36,7 +37,7 @@ Cherry-picking is still fine, with two notes: the logging set (`Logger`, `LogCle
 
 ## Versioning
 
-The library versions as a whole — semver git tags, one [CHANGELOG.md](CHANGELOG.md) entry per release. Individual classes carry their own `@since` / `@last` narrative in their headers. Current release: **v1.0.0**.
+The library versions as a whole — semver git tags, one [CHANGELOG.md](CHANGELOG.md) entry per release. Individual classes carry their own `@since` / `@last` narrative in their headers. Current release: **v1.1.0**.
 
 ## License
 
