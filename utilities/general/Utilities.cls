@@ -1,13 +1,16 @@
 /**
  * @description This class provides a set of utility methods for various common tasks in Apex.
- * @license Licensed under Creative Commons Attribution 4.0 International. Use, distribute, and modify this code as you see fit.
  * @author David Wood
  * @since June 2024
  * @last May 2026 — conformance refactor
  * @last August 2026 — removed duplicate record-type helpers and dead null handling
+ * @last 2026-08-13 — RFC 4122 v4 generateUUID; map builders return plain generic maps with validated
+ *                    inputs; getFakeId contract documented; stray license tag removed (repo LICENSE governs)
  * @group Utilities
  */
 public inherited sharing class Utilities {
+  // Transaction-static fake-Id counter: starts at 1, advances once per getFakeId call,
+  // shared across every SObjectType so successive fake Ids never collide in a transaction.
   private static Integer segment = 1;
   /**
    * @description Returns the standard pricebook Id. Included for existing classes; prefer PricebookUtil directly.
@@ -21,9 +24,14 @@ public inherited sharing class Utilities {
 
   /**
    * @description Generates a map of Id to SObject from a list based on a specified key field.
-   * @param key The field name to use as the key. This must be of type Id.
-   * @param sObjectList The list of SObjects to transform.
+   *              The returned map is a plain generic `Map<Id, SObject>` — it cannot be cast to a
+   *              concrete map type such as `Map<Id, Account>`; cast individual values instead.
+   * @param key The API name of the key field. Must be an Id or lookup/reference field on the list's
+   *            SObject type. Records whose key value is null are skipped.
+   * @param sObjectList The list of SObjects to transform. Null or empty lists return an empty map.
    * @return A map where the key is the specified field and the value is the SObject.
+   * @throws IllegalArgumentException If the key is blank, is not a field on the list's SObject type,
+   *         or is not an Id/reference field.
    */
   public static Map<Id, SObject> createIdMapFromCollectionByKey(
     String key,
@@ -38,9 +46,13 @@ public inherited sharing class Utilities {
 
   /**
    * @description Generates a map of String to SObject from a list based on a specified key field.
-   * @param key The field name to use as the key. The field's value must be castable to String.
-   * @param sObjectList The list of SObjects to transform.
+   *              The returned map is a plain generic `Map<String, SObject>` — it cannot be cast to a
+   *              concrete map type such as `Map<String, Account>`; cast individual values instead.
+   * @param key The API name of the key field. The field's value must be castable to String.
+   *            Records whose key value is null are skipped.
+   * @param sObjectList The list of SObjects to transform. Null or empty lists return an empty map.
    * @return A map where the key is the specified field and the value is the SObject.
+   * @throws IllegalArgumentException If the key is blank or is not a field on the list's SObject type.
    */
   public static Map<String, SObject> createStringMapFromCollectionByKey(
     String key,
@@ -55,9 +67,14 @@ public inherited sharing class Utilities {
 
   /**
    * @description Generates a map of Id to list of SObjects from a list based on a specified key field.
-   * @param key The field name to use as the key. This must be of type Id.
-   * @param sObjectList The list of SObjects to transform.
+   *              The returned map and its value lists are plain generic collections
+   *              (`Map<Id, List<SObject>>`) — cast individual values instead of the map itself.
+   * @param key The API name of the key field. Must be an Id or lookup/reference field on the list's
+   *            SObject type. Records whose key value is null are skipped.
+   * @param sObjectList The list of SObjects to transform. Null or empty lists return an empty map.
    * @return A map where the key is the specified field and the value is a list of SObjects.
+   * @throws IllegalArgumentException If the key is blank, is not a field on the list's SObject type,
+   *         or is not an Id/reference field.
    */
   public static Map<Id, List<SObject>> createMapFromCollectionWithCollectionValues(
     String key,
@@ -109,26 +126,19 @@ public inherited sharing class Utilities {
   }
 
   /**
-   * @description Generates a UUID.
-   * @return A randomly generated UUID as a string.
+   * @description Generates an RFC 4122 version 4 (random) UUID. The version and variant bits are
+   *              set per the RFC, so the value is a genuine v4 UUID — suitable as a correlation
+   *              identifier and safe to hand to any consumer that validates UUID structure.
+   * @return A 36-character lowercase UUID string in 8-4-4-4-12 hex format.
    */
   public static String generateUUID() {
-    Blob aesKey = Crypto.generateAesKey(128);
-    String hexKey = EncodingUtil.convertToHex(aesKey);
-    return hexKey.substring(0, 8) +
-      '-' +
-      hexKey.substring(8, 12) +
-      '-' +
-      hexKey.substring(12, 16) +
-      '-' +
-      hexKey.substring(16, 20) +
-      '-' +
-      hexKey.substring(20);
+    return UUID.randomUUID().toString();
   }
 
   /**
-   * @description Generates a random counter value.
-   * @return A randomly generated counter value as a string.
+   * @description Generates a short random token — the first four hex characters of a generated UUID.
+   *              Random, not sequential: use it to de-collide test data, not to order anything.
+   * @return A 4-character lowercase hex string.
    */
   public static String generateRandomCounter() {
     return generateUUID().substring(0, 4);
@@ -227,9 +237,14 @@ public inherited sharing class Utilities {
   }
 
   /**
-   * @description Returns a fake ID for the specified SObject type.
+   * @description Returns a fake record Id for the specified SObject type — for in-memory test
+   *              fixtures, never for DML. Format contract: exactly 15 characters — the type's
+   *              3-character key prefix followed by a 12-digit zero-padded counter. The counter is
+   *              transaction-static: it starts at 1, advances by 1 on every call, and is shared
+   *              across all SObject types, so every Id generated within a transaction is distinct.
+   *              Assigning the value to an `Id` variable normalizes it to the 18-character form.
    * @param sot The Schema.SObjectType for which a fake ID is needed.
-   * @return A fake ID as a String.
+   * @return A 15-character fake Id String (key prefix + zero-padded counter), assignable to Id.
    */
   public static String getFakeId(Schema.SObjectType sot) {
     String result = String.valueOf(segment++);

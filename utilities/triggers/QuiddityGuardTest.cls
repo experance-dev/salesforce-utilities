@@ -1,13 +1,15 @@
 /**
- * @description Unit tests for QuiddityGuard. Verifies trusted-quiddity detection,
- *              override mechanics, and AccessException on unacceptable quiddities.
+ * @description Unit tests for QuiddityGuard. Pins the immutable membership-check
+ *              surface (isTrusted / isUntrusted / isTestQuiddity), the current-context
+ *              conveniences, override mechanics, channel identifiers, and
+ *              AccessException escalation on untrusted or unacceptable quiddities.
  * @group Triggers
  * @see QuiddityGuard
  * @author David Wood
  * @since July 2024
  * @last May 2026 — conformance refactor
- * @last August 2026 — direct coverage for the SOAP and Bulk API helper checks;
- *       analyzer conformance (TRUSTED_QUIDDITIES rename follow-through)
+ * @last 2026-08-13 — coverage moved onto the membership-check surface after the trust
+ *       lists went private; direct pins for isTrusted / isUntrusted / isTestQuiddity
  */
 @isTest
 private without sharing class QuiddityGuardTest {
@@ -16,15 +18,18 @@ private without sharing class QuiddityGuardTest {
     TestFactory.createTestUser();
   }
 
+  /**
+   * @description A real test run executes under a RUNTEST_* quiddity, so the
+   *              current-context check reports trusted without any override.
+   */
   @isTest
-  static void testQuiddityGuardFindsTestQuiddityPositive() {
+  static void testCurrentQuiddityIsTrustedInTestContext() {
     System.runAs(TestFactory.getCreatedTestUser()) {
       Test.startTest();
 
-      // Test with a quiddity that should be in the trusted list
       Assert.isTrue(
-        QuiddityGuard.isAcceptableQuiddity(QuiddityGuard.TRUSTED_QUIDDITIES),
-        'Expected a current quiddity to be in the Trusted Quiddities list'
+        QuiddityGuard.isCurrentQuiddityTrusted(),
+        'Expected the test-runner quiddity to be classified as a trusted channel'
       );
 
       // Override with REST quiddity and test
@@ -47,23 +52,76 @@ private without sharing class QuiddityGuardTest {
         QuiddityGuard.isNotAcceptableQuiddity(
           new List<Quiddity>{ Quiddity.SOAP }
         ),
-        'Expected Invocable Action quiddity to not be in trusted quiddities list'
+        'Expected Invocable Action quiddity to not be in the supplied accept list'
       );
 
       Test.stopTest();
     }
   }
 
+  /**
+   * @description Pins the membership verdicts of the three private trust lists
+   *              through their public membership-check methods: trusted channels
+   *              report trusted, externally reachable entry points report
+   *              untrusted, and only RUNTEST_* quiddities report test execution.
+   */
+  @isTest
+  static void testMembershipChecksClassifyChannels() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      Test.startTest();
+
+      Assert.isTrue(
+        QuiddityGuard.isTrusted(Quiddity.BATCH_APEX),
+        'Expected BATCH_APEX to be a trusted channel'
+      );
+      Assert.isTrue(
+        QuiddityGuard.isTrusted(Quiddity.RUNTEST_SYNC),
+        'Expected RUNTEST_SYNC to be a trusted channel'
+      );
+      Assert.isFalse(
+        QuiddityGuard.isTrusted(Quiddity.REST),
+        'Expected REST to NOT be a trusted channel'
+      );
+
+      Assert.isTrue(
+        QuiddityGuard.isUntrusted(Quiddity.REST),
+        'Expected REST to be an untrusted, externally reachable channel'
+      );
+      Assert.isTrue(
+        QuiddityGuard.isUntrusted(Quiddity.AURA),
+        'Expected AURA to be an untrusted, externally reachable channel'
+      );
+      Assert.isFalse(
+        QuiddityGuard.isUntrusted(Quiddity.QUEUEABLE),
+        'Expected QUEUEABLE to NOT be an untrusted channel'
+      );
+
+      Assert.isTrue(
+        QuiddityGuard.isTestQuiddity(Quiddity.RUNTEST_ASYNC),
+        'Expected RUNTEST_ASYNC to be classified as a test execution'
+      );
+      Assert.isFalse(
+        QuiddityGuard.isTestQuiddity(Quiddity.SYNCHRONOUS),
+        'Expected SYNCHRONOUS to NOT be classified as a test execution'
+      );
+
+      Test.stopTest();
+    }
+  }
+
+  /**
+   * @description Negative path for the current-context trusted check: a quiddity
+   *              outside the trusted set (FUTURE) reports untrusted.
+   */
   @isTest
   static void testQuiddityOverrideReturnsFalsePositive() {
     System.runAs(TestFactory.getCreatedTestUser()) {
       QuiddityGuard.testQuiddityOverride = Quiddity.FUTURE;
       Test.startTest();
 
-      // Test with a quiddity that should not be in the trusted list
       Assert.isFalse(
-        QuiddityGuard.isAcceptableQuiddity(QuiddityGuard.TRUSTED_QUIDDITIES),
-        'Expected Future quiddity to not be in trusted quiddities list'
+        QuiddityGuard.isCurrentQuiddityTrusted(),
+        'Expected Future quiddity to not be classified as a trusted channel'
       );
 
       Test.stopTest();
@@ -132,8 +190,13 @@ private without sharing class QuiddityGuardTest {
     }
   }
 
+  /**
+   * @description Caller-supplied accept-list escalation: an accepted quiddity
+   *              returns true, and a rejected quiddity with throwError=true
+   *              raises AccessException.
+   */
   @isTest
-  static void testQuiddityGuardThrowsException() {
+  static void testAcceptListEscalatesRejectionToException() {
     System.runAs(TestFactory.getCreatedTestUser()) {
       QuiddityGuard.testQuiddityOverride = Quiddity.FUTURE;
       Test.startTest();
@@ -147,7 +210,7 @@ private without sharing class QuiddityGuardTest {
           'Expected Future quiddity to be acceptable'
         );
         QuiddityGuard.isAcceptableQuiddity(
-          QuiddityGuard.TRUSTED_QUIDDITIES,
+          new List<Quiddity>{ Quiddity.SYNCHRONOUS, Quiddity.BATCH_APEX },
           true
         );
         Assert.fail(
@@ -157,6 +220,38 @@ private without sharing class QuiddityGuardTest {
         Assert.isTrue(
           e.getMessage().contains('Quiddity not acceptable'),
           'Expected AccessException message'
+        );
+      }
+
+      Test.stopTest();
+    }
+  }
+
+  /**
+   * @description Trusted-channel escalation: an untrusted quiddity with
+   *              throwError=true raises AccessException, while throwError=false
+   *              reports false without throwing.
+   */
+  @isTest
+  static void testCurrentQuiddityTrustedEscalatesToException() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      QuiddityGuard.testQuiddityOverride = Quiddity.REST;
+      Test.startTest();
+
+      Assert.isFalse(
+        QuiddityGuard.isCurrentQuiddityTrusted(false),
+        'Expected REST to report untrusted without throwing when throwError is false'
+      );
+
+      try {
+        QuiddityGuard.isCurrentQuiddityTrusted(true);
+        Assert.fail(
+          'Expected AccessException to be thrown for an untrusted quiddity'
+        );
+      } catch (QuiddityGuard.AccessException e) {
+        Assert.isTrue(
+          e.getMessage().contains('Quiddity not acceptable'),
+          'Expected AccessException message to name the rejected quiddity check'
         );
       }
 

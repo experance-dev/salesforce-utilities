@@ -8,6 +8,8 @@
  * @last May 2026 — conformance refactor: sharing modifier, SYSTEM_MODE DML, exception base, header normalisation
  * @last August 2026 — createTestUser permission sets injectable via testUserPermissionSets; duplicate
  *                      record-type helper removed (Utilities keeps the canonical one); analyzer conformance
+ * @last 2026-08-13 — identity-safe user resolution: exact-Name permission-set matching with descriptive
+ *                     missing/ambiguous throws, assignPermSetIfPresent escape hatch, getCreatedTestUser exactly-one enforcement, getTestUserByUsername
  */
 @IsTest
 @SuppressWarnings(
@@ -15,6 +17,13 @@
 )
 public without sharing class TestFactory {
   private static Integer segment = 1;
+
+  // Injection seam for pinning the ambiguous-permission-set path: PermissionSet.Name is unique
+  // per namespace, so a real duplicate can't be fabricated in a test — only observed when a
+  // managed package's permission set collides with a local one. When non-null, resolution
+  // returns this list instead of querying.
+  @TestVisible
+  private static List<PermissionSet> permissionSetQueryOverride;
 
   // Permission sets createTestUser() assigns to the default test user.
   // Consumer orgs override this list before calling the factory; the default
@@ -314,37 +323,61 @@ public without sharing class TestFactory {
   }
 
   /**
-   * @description Assigns the named permission set to the given user in SYSTEM_MODE.
+   * @description Assigns the permission set with the EXACT given Name to the user in SYSTEM_MODE.
+   *              Resolution requires exactly one match: a missing or ambiguous Name throws rather
+   *              than silently assigning the wrong permission set — a security test running under
+   *              the wrong grant is worse than one that fails loudly.
    * @param usr         User to assign the permission set to.
-   * @param permSetName Name of the permission set.
+   * @param permSetName Exact API Name of the permission set (no wildcards).
+   * @throws TestFactoryException when no permission set — or more than one, across namespaces — matches the Name.
    */
   public static void assignPermSetToUser(User usr, String permSetName) {
-    // SOQL: permission set lookup; acceptable in test context.
-    Id permSetId = [
-      SELECT Id
-      FROM PermissionSet
-      WHERE Name LIKE :permSetName
-      LIMIT 1
-    ]
-    .Id;
-    PermissionSetAssignment psa = new PermissionSetAssignment(
-      AssigneeId = usr.Id,
-      PermissionSetId = permSetId
-    );
-    Database.insert(psa, AccessLevel.SYSTEM_MODE);
+    assignPermissionSet(usr, requireExactlyOnePermissionSet(permSetName));
+  }
+
+  /**
+   * @description Portability escape hatch: assigns the permission set with the EXACT given Name
+   *              when it exists in the org, and SKIPS SILENTLY — no exception, no assignment —
+   *              when no permission set matches. Use only where absence is an expected,
+   *              acceptable state (e.g. shared test source running in an org that doesn't ship
+   *              the optional permission set). An ambiguous Name (multiple matches across
+   *              namespaces) still throws, because assigning an arbitrary match is never safe.
+   * @param usr         User to assign the permission set to.
+   * @param permSetName Exact API Name of the permission set (no wildcards).
+   * @return `Boolean` — true when the permission set was found and assigned; false when it was
+   *         absent and the call skipped.
+   * @throws TestFactoryException when more than one permission set matches the Name.
+   */
+  public static Boolean assignPermSetIfPresent(User usr, String permSetName) {
+    List<PermissionSet> matches = findPermissionSetsByExactName(permSetName);
+    if (matches.isEmpty()) {
+      return false;
+    }
+    if (matches.size() > 1) {
+      throw ambiguousPermissionSetException(permSetName, matches.size());
+    }
+    assignPermissionSet(usr, matches[0].Id);
+    return true;
   }
 
   // ── Query helpers ────────────────────────────────────────────────────────
 
   /**
-   * @description Fetches the most recent factory-created user holding the named permission set.
-   * @param permissionName Permission set name to match.
-   * @return Most recently created User with that permission set and LastName = 'last'.
+   * @description Resolves the ONE user holding the exactly-named permission set. This is the
+   *              cross-transaction rediscovery seam for the `@TestSetup` pattern (createTestUser()
+   *              in setup, getCreatedTestUser() in each test method); it never guesses — zero or
+   *              multiple holders throw instead of returning "the most recent match", because a
+   *              test running as the wrong identity passes for the wrong reason. Prefer holding
+   *              the User returned by the create* methods when you're in the same transaction;
+   *              use getTestUserByUsername for precise lookup when several users exist.
+   * @param permissionName Exact permission set Name whose single holder identifies the test user.
+   * @return The single User assigned that permission set.
+   * @throws TestFactoryException when no user — or more than one — holds the permission set.
    */
   public static User getCreatedTestUser(String permissionName) {
     // SOQL: sub-select on PermissionSetAssignment; acceptable in test context.
-    return [
-      SELECT Id
+    List<User> holders = [
+      SELECT Id, Username
       FROM User
       WHERE
         Id IN (
@@ -352,18 +385,57 @@ public without sharing class TestFactory {
           FROM PermissionSetAssignment
           WHERE PermissionSet.Name = :permissionName
         )
-        AND LastName = 'last'
-      ORDER BY CreatedDate DESC
-      LIMIT 1
     ];
+    if (holders.isEmpty()) {
+      throw new TestFactoryException(
+        'No user holds permission set \'' +
+          permissionName +
+          '\'. Call createTestUser() (or assignPermSetToUser) in @TestSetup before resolving the running user.'
+      );
+    }
+    if (holders.size() > 1) {
+      throw new TestFactoryException(
+        holders.size() +
+          ' users hold permission set \'' +
+          permissionName +
+          '\' — the test-user identity is ambiguous. Hold the User returned by createTestUser(), or resolve precisely via getTestUserByUsername.'
+      );
+    }
+    return holders[0];
   }
 
   /**
-   * @description Fetches the most recent factory-created default test user.
-   * @return Most recently created test user matching TestFactoryDefaults.TEST_USER_PERMISSION.
+   * @description Resolves the factory-created default test user via its registered permission set.
+   * @return The single User holding TestFactoryDefaults.TEST_USER_PERMISSION.
+   * @throws TestFactoryException when no user — or more than one — holds that permission set.
    */
   public static User getCreatedTestUser() {
     return getCreatedTestUser(TestFactoryDefaults.TEST_USER_PERMISSION);
+  }
+
+  /**
+   * @description Resolves a user by Username — the org-unique identifier, so the result can never
+   *              be the wrong identity. Use this to rediscover a specific `@TestSetup`-created
+   *              user when several test users exist.
+   * @param username Exact Username of the user to resolve.
+   * @return The User with that Username.
+   * @throws TestFactoryException when no user has that Username.
+   */
+  public static User getTestUserByUsername(String username) {
+    // SOQL: acceptable in test context. Username is platform-unique, so 0 or 1 rows.
+    List<User> matches = [
+      SELECT Id, Username
+      FROM User
+      WHERE Username = :username
+    ];
+    if (matches.isEmpty()) {
+      throw new TestFactoryException(
+        'No user exists with Username \'' +
+          username +
+          '\'. Create the user first and use the Username from the returned record.'
+      );
+    }
+    return matches[0];
   }
 
   /**
@@ -440,7 +512,11 @@ public without sharing class TestFactory {
 
   // ── Inner types ──────────────────────────────────────────────────────────
 
-  /** @description Thrown when a defaults class name cannot be resolved or is otherwise invalid. */
+  /**
+   * @description Thrown when factory resolution fails: an unresolvable defaults class, a missing
+   *              or ambiguous permission set Name, or a test-user lookup that cannot be pinned to
+   *              exactly one identity.
+   */
   public class TestFactoryException extends UtilitiesModuleException {}
 
   /** @description Implement this interface in any inner class of TestFactoryDefaults to supply field defaults. */
@@ -464,6 +540,56 @@ public without sharing class TestFactory {
         sObj.put(field, defaults.get(field));
       }
     }
+  }
+
+  private static List<PermissionSet> findPermissionSetsByExactName(
+    String permSetName
+  ) {
+    if (permissionSetQueryOverride != null) {
+      return permissionSetQueryOverride;
+    }
+    // SOQL: permission set lookup; acceptable in test context. No LIMIT — the row count is the
+    // exactly-one contract both assign methods enforce.
+    return [
+      SELECT Id
+      FROM PermissionSet
+      WHERE Name = :permSetName
+    ];
+  }
+
+  private static Id requireExactlyOnePermissionSet(String permSetName) {
+    List<PermissionSet> matches = findPermissionSetsByExactName(permSetName);
+    if (matches.isEmpty()) {
+      throw new TestFactoryException(
+        'No permission set exists with Name \'' +
+          permSetName +
+          '\'. Deploy it (or override TestFactory.testUserPermissionSets with the sets this org ships); use assignPermSetIfPresent only where absence is an expected state.'
+      );
+    }
+    if (matches.size() > 1) {
+      throw ambiguousPermissionSetException(permSetName, matches.size());
+    }
+    return matches[0].Id;
+  }
+
+  private static TestFactoryException ambiguousPermissionSetException(
+    String permSetName,
+    Integer matchCount
+  ) {
+    return new TestFactoryException(
+      matchCount +
+        ' permission sets match Name \'' +
+        permSetName +
+        '\' (Name collides across namespaces) — assignment is ambiguous. Qualify the lookup or remove the collision.'
+    );
+  }
+
+  private static void assignPermissionSet(User usr, Id permSetId) {
+    PermissionSetAssignment psa = new PermissionSetAssignment(
+      AssigneeId = usr.Id,
+      PermissionSetId = permSetId
+    );
+    Database.insert(psa, AccessLevel.SYSTEM_MODE);
   }
 
   private static User getAdminUser() {

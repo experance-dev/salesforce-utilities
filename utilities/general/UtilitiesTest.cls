@@ -9,6 +9,8 @@
  * @last May 2026 — conformance refactor
  * @last August 2026 — DML-free map-builder fixtures; describe-derived record-type expectations;
  *                     direct coverage for list/type helpers; shape asserts; analyzer conformance
+ * @last 2026-08-13 — pinned RFC 4122 v4 bits on generateUUID, the 15-char getFakeId counter
+ *                    contract, generic-map returns, and the invalid-key-field negative path
  */
 @isTest
 public without sharing class UtilitiesTest {
@@ -102,7 +104,9 @@ public without sharing class UtilitiesTest {
 
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
-      Map<Id, Account> accountMap = (Map<Id, Account>) Utilities.createIdMapFromCollectionByKey(
+      // Contract: the returned map is a plain generic Map<Id, SObject>, never
+      // castable to a concrete map type — cast individual values instead.
+      Map<Id, SObject> accountMap = Utilities.createIdMapFromCollectionByKey(
         'Id',
         accounts
       );
@@ -149,7 +153,9 @@ public without sharing class UtilitiesTest {
 
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
-      Map<String, Account> accountMap = (Map<String, Account>) Utilities.createStringMapFromCollectionByKey(
+      // Contract: the returned map is a plain generic Map<String, SObject> —
+      // cast individual values, never the map itself.
+      Map<String, SObject> accountMap = Utilities.createStringMapFromCollectionByKey(
         'BillingStreet',
         accounts
       );
@@ -158,9 +164,12 @@ public without sharing class UtilitiesTest {
         accountMap.size(),
         'There should be 2 accounts in the map'
       );
+      Account firstAccount = (Account) accountMap.get(
+        accounts[0].BillingStreet
+      );
       Assert.areEqual(
         accounts[0].BillingStreet,
-        accountMap.get(accounts[0].BillingStreet).BillingStreet,
+        firstAccount.BillingStreet,
         'The first account should be in the map'
       );
       Map<String, SObject> accountMap2 = Utilities.createStringMapFromCollectionByKey(
@@ -188,7 +197,8 @@ public without sharing class UtilitiesTest {
 
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
-      Map<Id, List<Contact>> contactMap = (Map<Id, List<Contact>>) Utilities.createMapFromCollectionWithCollectionValues(
+      // Contract: generic Map<Id, List<SObject>> — value lists hold SObjects.
+      Map<Id, List<SObject>> contactMap = Utilities.createMapFromCollectionWithCollectionValues(
         'AccountId',
         contacts
       );
@@ -198,6 +208,32 @@ public without sharing class UtilitiesTest {
         contactMap.get(fakeAccountId).size(),
         'There should be 3 contacts for the first account'
       );
+    }
+    Test.stopTest();
+  }
+
+  @isTest
+  static void testCreateIdMapFromCollectionByKeyUnknownKeyField() {
+    List<Account> accounts = new List<Account>{
+      (Account) TestFactory.createSObject(new Account(Name = 'Acme'), false)
+    };
+    Utilities.createFakeIdsForList(accounts);
+
+    Test.startTest();
+    System.runAs(TestFactory.getMinAccessUser()) {
+      try {
+        Utilities.createIdMapFromCollectionByKey('No_Such_Field__c', accounts);
+        Assert.fail(
+          'Expected an IllegalArgumentException for an unknown key field.'
+        );
+      } catch (IllegalArgumentException e) {
+        Assert.isTrue(
+          e.getMessage().contains('No_Such_Field__c'),
+          'The error should name the unknown field; got "' +
+            e.getMessage() +
+            '".'
+        );
+      }
     }
     Test.stopTest();
   }
@@ -238,6 +274,18 @@ public without sharing class UtilitiesTest {
           uuid1
         ),
         'The UUID should match the 8-4-4-4-12 hex shape; got "' + uuid1 + '".'
+      );
+      // RFC 4122 v4 contract: version nibble is 4; variant nibble is 8, 9, a, or b.
+      Assert.areEqual(
+        '4',
+        uuid1.substring(14, 15),
+        'The version nibble should be 4 (RFC 4122 v4); got "' + uuid1 + '".'
+      );
+      Assert.isTrue(
+        '89ab'.contains(uuid1.substring(19, 20)),
+        'The variant nibble should be one of 8/9/a/b (RFC 4122); got "' +
+          uuid1 +
+          '".'
       );
       Assert.areNotEqual(uuid1, uuid2, 'The values should not be equal');
     }
@@ -398,19 +446,48 @@ public without sharing class UtilitiesTest {
   private static void testGetFakeId() {
     System.runAs(TestFactory.getMinAccessUser()) {
       Test.startTest();
-      Id firstId = Utilities.getFakeId(Account.SObjectType);
-      Id secondId = Utilities.getFakeId(Account.SObjectType);
+      String firstIdValue = Utilities.getFakeId(Account.SObjectType);
+      String secondIdValue = Utilities.getFakeId(Account.SObjectType);
+      String contactIdValue = Utilities.getFakeId(Contact.SObjectType);
       Test.stopTest();
 
+      String accountPrefix = Account.SObjectType.getDescribe(
+          SObjectDescribeOptions.DEFERRED
+        )
+        .getKeyPrefix();
+      String contactPrefix = Contact.SObjectType.getDescribe(
+          SObjectDescribeOptions.DEFERRED
+        )
+        .getKeyPrefix();
+
+      // Format contract: 15 characters — 3-char key prefix + 12-digit zero-padded counter.
+      Assert.areEqual(
+        15,
+        firstIdValue.length(),
+        'A fake Id should be exactly 15 characters.'
+      );
+      Assert.areEqual(
+        accountPrefix + '000000000001',
+        firstIdValue,
+        'The counter should start at 1, zero-padded to 12 digits behind the key prefix.'
+      );
+      Assert.areEqual(
+        accountPrefix + '000000000002',
+        secondIdValue,
+        'The counter should advance by 1 on every call.'
+      );
+      // Counter contract: shared across SObject types — the third call yields 3.
+      Assert.areEqual(
+        contactPrefix + '000000000003',
+        contactIdValue,
+        'The counter should be shared across SObject types, not per-type.'
+      );
+
+      Id firstId = firstIdValue;
       Assert.areEqual(
         Account.SObjectType,
         firstId.getSobjectType(),
         'The fake Id should carry the requested SObject type\'s key prefix.'
-      );
-      Assert.areNotEqual(
-        firstId,
-        secondId,
-        'Successive fake Ids should differ — the counter must advance per call.'
       );
     }
   }
