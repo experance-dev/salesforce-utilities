@@ -12,7 +12,7 @@ This file governs how things are named: Apex classes, methods, and variables; cu
 
 **Domain classes, if you introduce them, are `<SObject>Domain` — this library deliberately does not use fflib's plural convention** (`Accounts.cls`, `Orders.cls`). State your choice either way, because half the community expects the plural: fflib uses it to signal that a domain class always operates on a list. Here the domain layer lives in [`TriggerHandler`](../../utilities/triggers/TriggerHandler.cls) subclasses plus services (see [architecture-layering.md](./architecture-layering.md)), and a bare plural like `Orders` reads as a collection variable, not a class, to anyone picking the code up cold.
 
-**Interfaces carry an `I` prefix; their default implementation carries the archetype suffix plus `Impl`.** A service interfaced for dependency injection is `IOrderService`; its concrete implementation is `OrderServiceImpl`, wired once at class-load time and swapped for a test double through a `@TestVisible` setter. This is [architecture-layering.md §2–3](./architecture-layering.md)'s controller/service DI seam, restated here so the two files can't drift apart: any class that follows that pattern — service or otherwise — is named `I<Name>` for the interface and `<Name>Impl` for the implementation, no other prefix or suffix scheme.
+**Interface naming splits on the interface's role — `I` prefix for interface+`Impl` DI pairs; bare descriptive names for consumer-implemented callback and strategy interfaces.** The split is the one the shipped library already practices, made explicit. When an interface exists so an implementation can be swapped behind it — dependency injection, a test double slotted through a `@TestVisible` setter — the pair is named `I<Name>` / `<Name>Impl`: a service interfaced for DI is `IOrderService`, its concrete implementation `OrderServiceImpl`, wired once at class-load time; [`DMLManager.IDML`](../../utilities/dml/DMLManager.cls) is the shipped precedent. This is [architecture-layering.md §2–3](./architecture-layering.md)'s controller/service DI seam, restated here so the two files can't drift apart — any class following that pattern, service or otherwise, uses exactly that pair, no other prefix or suffix scheme. But when an interface is a contract the *consumer* implements — a callback or strategy handed into framework machinery — it carries a bare descriptive name, because the caller reads it as the thing they're writing, not as a slot they're filling: [`TestFactory.FieldDefaults`](../../utilities/testing/TestFactory.cls) (a defaults recipe), `PersonaScenario` (the story action a persona-matrix test runs), `PersonaOutcome.Check` (a custom assert). An `IFieldDefaults` would promise an `Impl` that never exists; the bare name states the role and stops there.
 
 ## 2. One word per concept; names must read cold
 
@@ -87,8 +87,13 @@ Custom permissions follow the `Can_<Action>` grammar owned by [permissions.md §
              catches §1's test infrastructure (factories, stubs, mocks,
              doubles) that ships no test methods — so the pattern admits
              those descriptive suffixes alongside *Test. Whether a class
-             actually contains test methods stays a review check. -->
-        <property name="testClassPattern" value="[A-Z][a-zA-Z0-9]*(Test|Factory|FactoryDefaults|Stub|Double)|Mock[A-Z][a-zA-Z0-9]*" />
+             actually contains test methods stays a review check. The
+             Persona alternative admits the persona-matrix module
+             (utilities/testing/persona/ — PersonaMatrix, PersonaBuilder,
+             PersonaOutcome, …): @IsTest infrastructure with descriptive
+             Persona* names, caught by this pattern only because it keys
+             off @IsTest (see docs/design/persona-matrix-testing.md). -->
+        <property name="testClassPattern" value="[A-Z][a-zA-Z0-9]*(Test|Factory|FactoryDefaults|Stub|Double)|Mock[A-Z][a-zA-Z0-9]*|Persona([A-Z][a-zA-Z0-9]*)?" />
     </properties>
 </rule>
 <rule ref="category/apex/codestyle.xml/MethodNamingConventions" />

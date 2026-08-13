@@ -167,4 +167,16 @@ Genuine long-tail failures — one-off per class, sharing no pattern with anythi
 
 ---
 
+## 3 Persona coverage
+
+### 3.1 Every persona a story touches gets tested — positive and negative expectations both declared
+
+**Rule.** Any story touching more than one persona tests every persona it touches, with the expected outcome declared per persona — what each persona **can** do and what it **must not** do, both stated explicitly. The required form is a [`PersonaMatrix`](../design/persona-matrix-testing.md) run (one scenario, every persona, per-persona `PersonaOutcome` expectations) or its per-method decomposition ([persona-matrix-testing §6.5](../design/persona-matrix-testing.md)) — per-method when any single matrix method would exceed 50% of a governor limit, and **always** per-method for async scenarios (queueable / future / batch), each single-persona run wrapped in `Test.startTest()`/`stopTest()`; the loop runner rejects async enqueues outright. A test that covers only the personas expected to succeed, or asserts denial for no persona, does not satisfy this section.
+
+**Why.** On a closed security model, the negative expectation *is* the security test: green happy-path coverage says nothing about whether the sharing and permission model holds. Hand-rolled `System.runAs` nests are the first thing dropped under schedule pressure; declaring the full persona-by-outcome matrix in one place makes the coverage checkable by a reviewer holding nothing but the diff — count the personas the story touches, count the `.persona(...).expect(...)` lines, and confirm at least one expectation is a denial (`denied(...)` or `seesNoRows()`) wherever the security model says access must not exist.
+
+Design, API, runner semantics, and the persona-registry split live in [docs/design/persona-matrix-testing.md](../design/persona-matrix-testing.md); the module ships in `utilities/testing/persona/`.
+
+---
+
 **Summary of the layering:** §1 is about what a test *is* — a header that tells a reader what it covers, org-independent construction so the same test source travels between environments, DML boundaries that satisfy platform rules, and test data that can never reach a real inbox. §2 is about what CI *does* with the suite those tests form — run all of it, every time, and treat any failure that isn't fixed in the PR that introduced it as a tracked, owned, sign-off-gated concession rather than either a hard block or a silent pass.
