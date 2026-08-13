@@ -121,7 +121,7 @@ sf project deploy validate \
 
 No promotion merge happens without a green validation against the org that merge will deploy to. Three specifics that earn their place:
 
-1. **The test level is explicit.** Sandbox deploys skip test execution by default; an implicit validation against a sandbox proves less than it appears to. `--test-level RunLocalTests` makes the gate mean the same thing at every rung.
+1. **The test level is explicit.** `sf project deploy validate` already defaults to `RunLocalTests`, so the flag isn't rescuing a silent skip on this command specifically — where it matters is consistency across the pipeline: `sf project deploy start` and quick-deploy runs don't carry that same default, and leaving the level implicit on validate is one accident away from an org-config change silently narrowing it. Spelling out `--test-level RunLocalTests` here is belt-and-braces — it makes the gate mean the same thing at every rung regardless of what any single command's default happens to be today.
 2. **The result posts to the PR as a comment.** A reviewer who can't see "this validates against the target org" is approving hope, not deployability. Evidence in the PR is part of the gate.
 3. **For production, the validation is also the deploy.** A successful validation's job ID stays quick-deployable for 10 days via `sf project deploy quick` — validate during the day, quick-deploy in the release window without re-running the suite.
 

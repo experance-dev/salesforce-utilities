@@ -26,7 +26,7 @@ Two boundary calls that come up repeatedly:
 
 **Rule.** Do not use workflow outbound messages in any new design; plan a migration wherever an audit finds one.
 
-**Why.** They are tied to the retired workflow engine, SOAP-only, point-to-point, and cannot replay missed deliveries — each of those gaps is something platform events were built to close.
+**Why.** They are SOAP-only, point-to-point, and cannot replay missed deliveries — each of those gaps is something platform events were built to close. Outbound messages also ship today as a Flow core action, not only as a workflow-rule artifact, so "the workflow engine is retired" isn't the argument against them; the transport-level limitations are, on their own, reason enough.
 
 ## 2. Every callout goes through a named credential
 

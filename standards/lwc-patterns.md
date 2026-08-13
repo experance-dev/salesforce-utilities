@@ -46,9 +46,9 @@ The template reads `invoices`, `error`, and `isLoading` — it never touches `wi
 
 ## 2. Multi-context components: one `@wire` per context, gated by a reactive null-out
 
-**Rule.** When a component can render against more than one SObject context (for example, the same panel mounted on both an Account and an Opportunity record page), declare **one `@wire` per context**, each parameterized by a reactive getter (`$xIdParam`) that resolves to `null` whenever that context isn't the active one. Do not try to collapse this into a single wire with a dynamically-swapped Apex method reference — `@wire` method references are static.
+**Rule.** When a component can render against more than one SObject context (for example, the same panel mounted on both an Account and an Opportunity record page), declare **one `@wire` per context**, each parameterized by a reactive getter (`$xIdParam`) that resolves to `undefined` whenever that context isn't the active one. Do not try to collapse this into a single wire with a dynamically-swapped Apex method reference — `@wire` method references are static.
 
-**Why.** The Lightning Data Service wire adapter short-circuits — it does not call the underlying Apex method at all — when a reactive parameter resolves to `null`. That means both wires can be declared unconditionally and only the active one ever fires, which preserves `cacheable=true` LDS caching for whichever context is live: switching contexts on a subsequent render re-uses the cache instead of forcing a fresh round-trip. A single dynamically-reassigned wire loses that caching entirely, because you're either re-wiring on every context change or routing through an imperative call that LDS can't cache the same way.
+**Why.** The Lightning Data Service wire adapter short-circuits — it does not call the underlying Apex method at all — only when a reactive parameter resolves to `undefined`. `null` is a value like any other to LDS: a parameter gated with `null` still fires the wire, calling the Apex method with a `null` argument instead of skipping it. Gating on `undefined` means both wires can be declared unconditionally and only the active one ever fires, which preserves `cacheable=true` LDS caching for whichever context is live: switching contexts on a subsequent render re-uses the cache instead of forcing a fresh round-trip. A single dynamically-reassigned wire loses that caching entirely, because you're either re-wiring on every context change or routing through an imperative call that LDS can't cache the same way.
 
 ```js
 const CONTEXT_ACCOUNT = "Account";
@@ -61,13 +61,14 @@ export default class RelatedInvoicesPanel extends LightningElement {
   wiredOppResult;
   wiredAccountResult;
 
-  // The non-active scope's param resolves to null so its wire short-circuits.
+  // The non-active scope's param resolves to undefined so its wire short-circuits.
+  // (a null default would still fire the wire with a null argument — see the Why note above.)
   get opportunityIdParam() {
-    return this.recordContext === CONTEXT_OPPORTUNITY ? this.recordId : null;
+    return this.recordContext === CONTEXT_OPPORTUNITY ? this.recordId : undefined;
   }
 
   get accountIdParam() {
-    return this.recordContext === CONTEXT_ACCOUNT ? this.recordId : null;
+    return this.recordContext === CONTEXT_ACCOUNT ? this.recordId : undefined;
   }
 
   @wire(getInvoicesForOpportunity, { opportunityId: "$opportunityIdParam" })

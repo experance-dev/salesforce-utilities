@@ -10,7 +10,7 @@ This file governs how automated static analysis enforces code quality on every c
 | --- | --- | --- | --- |
 | **sev1 (Critical)** | BLOCKS | BLOCKS | Author fixes before commit / before re-requesting review |
 | **sev2 (High)** | BLOCKS | BLOCKS | Author fixes; pre-commit catches it locally |
-| **sev3 (Medium)** | BLOCKS | BLOCKS | Author fixes; pre-commit catches it locally |
+| **sev3 (Moderate)** | BLOCKS | BLOCKS | Author fixes; pre-commit catches it locally |
 | **sev4 (Low)** | passes (speed) | BLOCKS | Author fixes before merge; CI is the gate |
 | **sev5 (Info)** | passes | passes (logged) | Surfaced if a pattern recurs — enough instances earn a standards-doc entry or a scoped waiver |
 
@@ -111,14 +111,14 @@ public static Set<Id> collectFeatureFlaggedIds(Set<Id> accountIds) {
 
 **Why a baseline is rejected, not just deferred:**
 
-1. **A baseline is retroactive ratification.** There is no fuckup-forgiveness mechanism in this canon. A baseline file is exactly that: an opaque snapshot of "findings we're willing to accept today because we already shipped them." The inline-waiver path is the only sanctioned exception, and it's pre-emptive — named scope, signed entry, cited at the call site — not a bulk grandfather clause.
+1. **A baseline is retroactive ratification.** There is no retroactive-forgiveness mechanism in this canon. A baseline file is exactly that: an opaque snapshot of "findings we're willing to accept today because we already shipped them." The inline-waiver path is the only sanctioned exception, and it's pre-emptive — named scope, signed entry, cited at the call site — not a bulk grandfather clause.
 2. **A baseline is invisible to the next author.** `@SuppressWarnings('PMD.<Rule>') // §3.N: <reason>` is greppable, visible in code review, and forces the author to name the rule and the rationale at the point of use. A baseline file is a JSON blob nobody writing new code ever opens. Drift is silent.
 3. **A baseline weakens the gate it's attached to.** Once a baseline exists, the operative threshold quietly becomes "no *new* findings" — strictly weaker than SPOTLESS. If your code also passes through a downstream deployment pipeline that runs the analyzer fresh against its own threshold, your baseline buys you nothing there — it lets you pass your own CI and then bounce at theirs.
 4. **A large pre-existing finding count is sweep work, not baseline material.** If a rule change (like revoking a broad `ApexDoc` suppression) suddenly surfaces hundreds of findings, that's a scheduled, owned sweep-toward-spotless effort with a tracked completion state — not a permanent acceptance wearing a baseline file's clothes.
 
 **What this rules out concretely:**
 
-- `sf code-analyzer run --baseline-file <path>` or any equivalent flag.
+- Any baseline/suppress-existing mechanism, should one ship in a future Code Analyzer release — a flag that accepts pre-existing findings and only gates on the delta.
 - A checked-in `reports/scanner-baseline.{json,yml}` artifact that CI reads.
 - A workflow step that diffs current findings against a prior run and only blocks on the delta.
 - Any configuration record — CMDT, Custom Setting, or otherwise — that toggles "ignore pre-existing findings."
@@ -141,7 +141,7 @@ If the standards owner won't sign it, the finding is real — fix the code.
 
 **Why this is load-bearing.** Without `pipefail`, every severity threshold from [§1](#1-run-the-analyzer-at-every-gate-the-severity-threshold-is-spotless) is theater. You can tune the threshold, canonize waivers, and run a weekly sweep — none of it matters if the shell wrapper returns `0` on every run because the display pipe exits `0`.
 
-**Companion rule — `--target` takes repeatable flags, not a comma-joined value.** `sf code-analyzer run --target` (`-t`) expects the flag repeated once per path, not a single comma-joined string. A comma-joined value produces a literal filename containing commas that matches nothing on disk — the analyzer silently scans zero files and exits `0`. Paired with a missing `pipefail`, the gate fails silently twice over: once because it scanned nothing, and again because the wrapper couldn't have surfaced that failure even if it had one.
+**Companion rule — build the `--target` value correctly, and don't trust it silently.** `sf code-analyzer run --target` (`-t`) accepts a comma-delimited list of paths in a single flag — you don't need to repeat the flag once per file. The failure mode worth guarding against isn't the delimiter choice, it's a malformed join: a stray space after a comma, an empty element from a trailing comma, or an unresolved shell variable can produce a path segment that matches nothing on disk, and the analyzer will silently scan zero files and exit `0`. Paired with a missing `pipefail`, the gate fails silently twice over: once because it scanned nothing, and again because the wrapper couldn't have surfaced that failure even if it had one.
 
 **Pattern:**
 
@@ -149,15 +149,12 @@ If the standards owner won't sign it, the finding is real — fix the code.
 #!/usr/bin/env sh
 set -o pipefail   # critical — pipeline exit codes propagate
 
-# Build repeatable --target flags; one -t per file
-TARGET_ARGS=""
-for f in $STAGED_APEX; do
-    TARGET_ARGS="$TARGET_ARGS --target $f"
-done
+# Build a single comma-delimited --target value from the staged file list.
+TARGET_ARG=$(printf '%s\n' $STAGED_APEX | paste -sd ',' -)
 
 sf code-analyzer run \
     --workspace force-app/main/default \
-    $TARGET_ARGS \
+    --target "$TARGET_ARG" \
     --severity-threshold 3 \
     --output-file "reports/scanner-pre-commit-$(git rev-parse --short HEAD).json"
 STATUS=$?

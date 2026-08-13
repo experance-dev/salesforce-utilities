@@ -67,23 +67,25 @@ static void setup() {
 
 See [`TestFactory.cls`](../utilities/testing/TestFactory.cls)'s `createTestUser` implementation — it wraps its own `User` insert in `System.runAs(getAdminUser())` internally, so callers get the MIXED_DML boundary for free instead of having to remember it at every call site.
 
-### 1.4 Synthetic test-data emails use the `.invalid` reserved TLD
+### 1.4 Synthetic test-data emails can never reach a real person
 
-**Rule.** Every email address generated in an `@isTest` factory, fixture, or `@TestSetup` method uses the `.invalid` TLD reserved by [RFC 2606](https://datatracker.ietf.org/doc/html/rfc2606#section-2) — typically `<prefix>-<unique>@example.invalid`. Never `@gmail.com`, never your own company's real domain, and never `@example.com` — that domain is reserved but it does resolve.
+**Rule.** Every email address generated in an `@isTest` factory, fixture, or `@TestSetup` method uses a domain that reaches no real person: a throwaway-inbox domain like `@mailinator.com` (deliverable, but the inbox is public, disposable, and unwatched — the pattern this library's [`TestFactoryDefaults.cls`](../utilities/testing/TestFactoryDefaults.cls) ships), or a reserved non-resolving domain like `@example.invalid` ([RFC 2606](https://datatracker.ietf.org/doc/html/rfc2606#section-2)). Never `@gmail.com`, and never your own company's real domain.
 
-**Why.** `.invalid` is the one TLD that cannot resolve to a real mailbox by DNS construction. If a production code path ever escapes its mock seam during a test run — directly via `Messaging.sendEmail`, or indirectly through a workflow, flow, or trigger that sends email — the address fails delivery at the resolver, never at a real inbox. Combined with a rule that test code must never actually dispatch email, this is the belt-and-suspenders boundary: the test shouldn't send, and if it somehow did, the address can't reach anyone.
+**Why.** The point of the rule is the recipient, not the TLD: no test run may ever land mail in a real person's inbox. A throwaway domain and a non-resolving domain both satisfy that; a colleague's real address — even copy-pasted into "obviously fake" test data — does not. This pairs with the harder rule that test code never actually dispatches email in the first place (build the `Messaging.SingleEmailMessage` and assert on its shape; never call `Messaging.sendEmail` — §1.5): the test shouldn't send, and if a production path somehow escapes its mock seam, the address still reaches nobody.
 
 ```apex
-// Good
+// Good — throwaway inbox domain, reaches no one who matters
+String email = 'order-test-' + String.valueOf(Crypto.getRandomInteger()) + '@mailinator.com';
+
+// Also good — reserved TLD, cannot resolve at all
 String email = 'order-test-' + String.valueOf(Crypto.getRandomInteger()) + '@example.invalid';
 
-// Bad — these CAN resolve to real mailboxes
-String email = 'test@example.com';        // reserved, but DOES resolve
+// Bad — these CAN land in a real person's inbox
 String email = 'test@gmail.com';          // real domain
-String email = 'test@yourcompany.com';    // confused-real-domain — never seed a real company domain in test data
+String email = 'jsmith@yourcompany.com';  // a colleague's real address in test data — never
 ```
 
-Seed this pattern once in your org's [`TestFactoryDefaults.cls`](../utilities/testing/TestFactoryDefaults.cls) per-SObject defaults, so every generated record gets a safe email without each test author having to remember the rule.
+Seed the pattern once in your org's [`TestFactoryDefaults.cls`](../utilities/testing/TestFactoryDefaults.cls) per-SObject defaults, so every generated record gets a safe address without each test author having to remember the rule. One caveat on throwaway domains: mailinator inboxes are **publicly readable** — never put anything sensitive in a test email address or body that you wouldn't post publicly.
 
 ---
 

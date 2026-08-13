@@ -67,9 +67,9 @@ If a platform API forces a one-off exception — e.g. `Database.upsert(records, 
 
 ## 4. Feature-gated fields under `USER_MODE` need an `isAccessible()` guard everywhere they're queried
 
-**Rule.** When any code path issues `WITH USER_MODE` SOQL referencing a field that isn't in every user's FLS — typically a custom lookup or field gated behind a feature permission set — that SOQL raises `QueryException: No such column` for a user who lacks FLS on the field. `USER_MODE` doesn't just filter the result; it hides the field from the schema the query sees. If that code path can fire from a trigger, a cascade service, or an inbound REST call that any persona might trigger — not just the feature's own users — an ungated user causes it to throw.
+**Rule.** When any code path issues `WITH USER_MODE` SOQL referencing a field that isn't in every user's FLS — typically a custom lookup or field gated behind a feature permission set — that SOQL raises a `QueryException` for a user who lacks FLS on the field: an insufficient-permissions error, not "no such column," and its `getInaccessibleFields()` method reports exactly which fields the running user was blocked from. If that code path can fire from a trigger, a cascade service, or an inbound REST call that any persona might trigger — not just the feature's own users — an ungated user causes it to throw.
 
-**"We used `WITH USER_MODE`, so we're covered" is the wrong mental model.** `USER_MODE` protects against *unauthorized reads*. It does nothing to protect an *unauthorized user's unrelated transaction* from breaking because the query it incidentally triggers can't resolve a column it has no business needing. That's a separate failure mode, and it needs a separate guard.
+**"We used `WITH USER_MODE`, so we're covered" is the wrong mental model.** `USER_MODE` protects against *unauthorized reads*. It does nothing to protect an *unauthorized user's unrelated transaction* from breaking because the query it incidentally triggers throws over a field it has no business needing. That's a separate failure mode, and it needs a separate guard.
 
 **Guard pattern:** check `isAccessible()` on the gated field before the query runs, and short-circuit to a safe no-op (empty collection, early return) if it isn't accessible.
 
@@ -113,7 +113,7 @@ public static Set<Id> collectOrderIdsForAccounts(Set<Id> accountIds) {
 
 **Rule.** A feature-restricted Lightning component and its Apex controller are protected by three layers, each of which must fail closed independently:
 
-1. **FlexiPage Component Visibility** — a filter condition on the component's placement (e.g. `{!$Permission.FeatureAccess} = true`) hides the panel for non-permissioned users at the App Builder layer, before the component even loads.
+1. **FlexiPage Component Visibility** — a filter condition on the component's placement (e.g. `{!$Permission.Feature_Access} = true`) hides the panel for non-permissioned users at the App Builder layer, before the component even loads.
 2. **LWC custom-permission check** — the component imports `@salesforce/customPermission/<name>` and gates its own rendering with a strict `=== true` check. Even if the FlexiPage visibility rule is misconfigured or bypassed (a different page includes the component without the same filter), the component self-gates.
 3. **Apex Class Access on the permission set** — the `@AuraEnabled` controller class is only invokable by permission sets that grant it Apex Class Access. Even if both UI-layer checks are bypassed — a crafted request calling the Apex method directly — the platform rejects the call before any code runs.
 

@@ -2,7 +2,7 @@
 
 ## Header
 
-ApexDoc annotations live **only in the class header** (not on every method):
+Every class header carries:
 
 | Tag            | Value                                                         |
 | -------------- | ------------------------------------------------------------- |
@@ -12,7 +12,9 @@ ApexDoc annotations live **only in the class header** (not on every method):
 | `@since`       | Existing date, or current month/year (e.g. `May 2026`).       |
 | `@last`        | Current date + brief change note; append to existing entries. |
 
-Comment groupings/sections, not lines. Method-level ApexDoc only when params/returns warrant `@param` / `@return`.
+Comment groupings/sections, not lines.
+
+**Method-level ApexDoc is not header-only.** Every `public`, `global`, `@AuraEnabled`, `virtual`, and `abstract` method carries its own ApexDoc — the public surface is the contract other engineers code against. `private` methods stay undocumented by default, documented only when one of four criteria fires (business-rule predicate, cached state, non-obvious side effects, ordering/idempotency contract). Full shape and the private-method criteria are canonized in [documentation.md §3](../standards/documentation.md#3-apexdoc-and-jsdoc-coverage-on-the-public-surface) — this file doesn't restate them.
 
 ## Naming
 
@@ -44,16 +46,16 @@ Decompose anything over budget. Prefer `Map` lookups over nested loops. Single r
 ## Error handling
 
 - Use [`Logger`](../utilities/logging/Logger.cls) for logging — never `System.debug` in production paths.
-- Processing classes wrap in try/catch and rethrow with a custom exception that carries context:
+- Processing classes wrap in try/catch and rethrow with a custom exception that carries context. **Never concatenate `e.getMessage()` + `e.getStackTraceString()` into the rethrown message** — that's the exact anti-pattern [observability.md](../standards/observability.md) bans: internal exception detail leaking into a message a caller (or an end user, several layers up) can see. `Logger.logException` captures the full detail server-side; the rethrown message carries only a correlation ID and the exception's type name:
 
 ```apex
 try {
     // ...
 } catch (Exception e) {
+    String correlationId = Utilities.generateUUID();
     Logger.logException(e, 'OrderProcessor', 'processOrders');
     throw new OrderProcessorException(
-        'An error occurred while processing orders: '
-        + e.getMessage() + ' - ' + e.getStackTraceString());
+        'Order processing failed [' + correlationId + ']: ' + e.getTypeName());
 }
 ```
 
@@ -67,7 +69,7 @@ public class OrderProcessorException extends OrderModuleException {
 
 ## Caching
 
-- Use **session platform cache** for cross-transaction state (e.g. trigger helper flags). Don't use static class variables as a substitute.
+- Use **session platform cache** for state that genuinely needs to survive past the current transaction (e.g. a value computed once and reused by a later, separate transaction). Static class variables reset at the end of every transaction, so they're the wrong tool for that job — but they're the *right* tool for state scoped to a single transaction (a trigger recursion guard, a bypass flag checked only within the transaction that set it). Don't reach for platform cache just because a variable is `static`; reach for it when the state has to outlive the transaction.
 
 ## Scheduling
 
@@ -90,12 +92,19 @@ List<Account> accs = [SELECT Id, Name FROM Account WITH USER_MODE LIMIT 50];
 Database.insert(accs, AccessLevel.USER_MODE);
 ```
 
-Audit `DMLManager.xxxAsUser` to confirm it uses `AccessLevel.USER_MODE` internally.
+`DMLManager.xxxAsUser` is verified to route through `AccessLevel.USER_MODE` internally on every path (see [`DMLManager.cls`](../utilities/dml/DMLManager.cls)) — there's nothing left to audit here.
 
-**CMDT carve-out.** `WITH SYSTEM_MODE` is acceptable on Custom Metadata Type queries since CMDT reads bypass CRUD/FLS by platform rule. `WITH USER_MODE` on a CMDT SOQL is semantically policy-theater and has historically raised `QueryException` on older API versions. Prefer `WITH SYSTEM_MODE` (or no clause — CMDT reads ignore both) when the query targets a `__mdt` object; document the choice in the method ApexDoc.
+**CMDT reads — not routine SOQL.** Custom Metadata Type access goes through `Type.getInstance()` / `<Type>.getAll()`, never a SOQL query — see [architecture-layering.md](../standards/architecture-layering.md) for the full rule and why. The one sanctioned exception is narrow: a Custom Metadata field is a long-text area whose value exceeds the 255-character truncation the `getInstance()` / `getAll()` static methods impose. That's the only case where SOQL against a `__mdt` object is the right call, and when it fires, the query uses `WITH SYSTEM_MODE` with the reason documented inline — not `WITH USER_MODE`, which is policy theater here: CMDT reads bypass CRUD/FLS by platform rule, so there's no user-mode access decision to make.
 
 ```apex
-List<Integration_Config__mdt> cfg = [SELECT Id, SObject_Name__c FROM Integration_Config__mdt WITH SYSTEM_MODE];
+// Long_Description__c exceeds the 255-char limit Type.getInstance() truncates to;
+// SOQL is the only way to retrieve the full value. WITH SYSTEM_MODE — CMDT reads
+// bypass CRUD/FLS by platform rule, so WITH USER_MODE here would be policy theater.
+List<Integration_Config__mdt> cfg = [
+    SELECT Id, Long_Description__c
+    FROM Integration_Config__mdt
+    WITH SYSTEM_MODE
+];
 ```
 
 ### Logging discipline

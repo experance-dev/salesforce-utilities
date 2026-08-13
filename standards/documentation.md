@@ -34,7 +34,7 @@ The `@last` entry is the audit trail of what the class does *now*, not a mirror 
  */
 ```
 
-[`DMLManager.cls`](../utilities/dml/DMLManager.cls) is a real example of the discipline: its `@last` line reads `Wave 2 USER_MODE migration; DMLManagerException now extends UtilitiesModuleException` — one line naming the feature-level change, not a list of every commit that touched the file.
+[`DMLManager.cls`](../utilities/dml/DMLManager.cls) is a real example of the discipline: its `@last` line reads `May 2026 — USER_MODE migration; DMLManagerException now extends UtilitiesModuleException` — one line naming the feature-level change, not a list of every commit that touched the file.
 
 Letting `@last` grow into a full change history defeats its purpose: a reader scanning the header wants "what does this class do and when did that last change," not a duplicate of `git log --follow`. If you find yourself appending an entry for every PR, the class is overdue for a squash of its own header.
 

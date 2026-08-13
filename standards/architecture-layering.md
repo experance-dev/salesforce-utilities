@@ -60,11 +60,11 @@ public interface IOrderService {
 
 ## 4. Never query Custom Metadata Types with SOQL — use `Type.getInstance()` / `Type.getAll()`
 
-**Rule.** Custom Metadata Type access always goes through the platform `Type` methods — `MyType__mdt.getInstance(devName)` for a single row, `MyType__mdt.getAll()` for the full keyed map — then filter and sort in memory. There is no SOQL-on-CMDT exception. Filtering cost and `ORDER BY` convenience don't justify a query: a `getAll().values()` collection is small enough that an in-memory pass beats a governor-consuming query every time.
+**Rule.** Custom Metadata Type access always goes through the platform `Type` methods — `MyType__mdt.getInstance(devName)` for a single row, `MyType__mdt.getAll()` for the full keyed map — then filter and sort in memory. There is exactly one sanctioned exception, covered at the end of this section. Filtering cost and `ORDER BY` convenience don't justify a query: a `getAll().values()` collection is small enough that an in-memory pass beats a query every time.
 
-**Why.** The platform `Type` methods are zero-SOQL — they don't spend a slot against the 100-query governor limit, they're cached at the platform layer, and repeated calls in the same transaction don't re-query. A CMDT query spends a governor slot on data the platform is already holding for you. It also trips static analyzers' CRUD-violation rule for nothing in return: `WITH USER_MODE` on a `__mdt` object is theater — CMDT bypasses CRUD/FLS by platform rule, and on some API versions a `USER_MODE` query against `__mdt` raises a `QueryException` outright — while `WITH SYSTEM_MODE` spends a security-relevant keyword on a query that shouldn't exist. Remove the query and the whole access-level debate disappears with it.
+**Why.** The platform `Type` methods are cache-served — `getInstance()` / `getAll()` reads come from the platform's CMDT cache, not a fresh query, so repeated calls in the same transaction (or across transactions) cost nothing extra. A CMDT SOQL query bypasses that cache for data the platform is already holding for you. It also trips static analyzers' CRUD-violation rule for nothing in return: `WITH USER_MODE` on a `__mdt` object is theater — CMDT bypasses CRUD/FLS by platform rule, and on some API versions a `USER_MODE` query against `__mdt` raises a `QueryException` outright — while `WITH SYSTEM_MODE` spends a security-relevant keyword on a query that shouldn't exist. Remove the query and the whole access-level debate, plus the analyzer noise, disappears with it.
 
-Treat this as absolute, not "prefer, with exceptions." A soft version of this rule produces exactly what soft rules always produce: every author is convinced their case is the exception, and the list of violations never gets shorter.
+Treat this as absolute apart from that one documented exception below — not "prefer, with exceptions" as a general license. A soft version of this rule produces exactly what soft rules always produce: every author is convinced their case is the exception, and the list of violations never gets shorter.
 
 ```apex
 // The only pattern — zero SOQL, platform-cached.
@@ -84,7 +84,7 @@ Single-row lookups follow the same rule:
 Integration_Config__mdt config = Integration_Config__mdt.getInstance('Default_Endpoint');
 ```
 
-**Known limit — and it is not an exception.** `getAll()` does not populate long-text-area fields. A CMDT row carrying one needs `getInstance(devName)` for that specific row, not a query, and even then the long-text value is the only thing `getInstance` buys you over `getAll`. If a design depends on bulk-reading long text out of CMDT, the design is wrong — that payload belongs in a Static Resource or a custom object, not a metadata type.
+**Known limit — and the one sanctioned exception.** Every static CMDT method — `getAll()`, `getInstance()`, and the rest — truncates every field at 255 characters. `getInstance(devName)` is not a workaround for a long-text-area field; it truncates the same way `getAll()` does. The no-SOQL rule above stands for every normal CMDT read. The one carve-out: a field that must actually exceed 255 characters — a long-text-area value the design genuinely depends on in full — may be read via SOQL, because SOQL is the platform's documented escape hatch for the untruncated value. Document that carve-out inline at the query, with the reason, so it reads as a deliberate, narrow exception rather than a habit.
 
 ## 5. Selector classes own all SOQL for an SObject — zero business logic, zero DML
 

@@ -44,12 +44,12 @@ See [`TriggerHandler.cls`](../utilities/triggers/TriggerHandler.cls) for the ful
 trigger ContactTrigger on Contact (
     before delete, after update
 ) {
-    new ContactCascadeCleanupHandler().run();
-    new ContactStatusNotificationHandler().run();
+    new ContactCascadeCleanupTriggerHandler().run();
+    new ContactStatusNotificationTriggerHandler().run();
 }
 ```
 
-`ContactCascadeCleanupHandler` overrides only `beforeDelete()`; `ContactStatusNotificationHandler` overrides only `afterUpdate()`. Both are safe to instantiate on every trigger fire — whichever one's hook doesn't match the current context runs its inherited no-op and returns immediately.
+`ContactCascadeCleanupTriggerHandler` overrides only `beforeDelete()`; `ContactStatusNotificationTriggerHandler` overrides only `afterUpdate()`. Both are safe to instantiate on every trigger fire — whichever one's hook doesn't match the current context runs its inherited no-op and returns immediately.
 
 ## 3. Idempotency belongs at two layers: the handler filters for performance, the service enforces it for correctness
 

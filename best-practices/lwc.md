@@ -45,7 +45,7 @@ get error() { return this.wiredRecords?.error; }
 ### Errors and toasts
 
 - User-facing errors via `lightning/platformShowToastEvent` with a user-friendly message. Never display raw exception text.
-- Log technical detail via [`Logger`](../utilities/logging/Logger.cls) on the Apex side; the LWC user-facing message is short and actionable.
+- Log technical detail via [`Logger`](../utilities/logging/Logger.cls) on the Apex side; the LWC user-facing message is short and tells the user what to do next.
 
 ### Platform events
 

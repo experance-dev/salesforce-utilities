@@ -74,19 +74,27 @@ try {
 
 ```apex
 List<Contact> subjectContacts = /* records identified for this subject */;
-Database.DeleteResult[] results = DMLManager.deleteAsUser(subjectContacts);
+DMLManager.deleteAsUser(subjectContacts);
 Database.emptyRecycleBin(subjectContacts);
 ```
 
+If the caller needs a per-record success/failure result rather than the manager's all-or-nothing default, drop to `Database.delete(subjectContacts, false, AccessLevel.USER_MODE)` directly and inspect the returned `Database.DeleteResult[]` — `DMLManager.deleteAsUser` itself returns `void`.
+
 ### 2.2 Cascade erasure from a `before delete` trigger; rethrow on cascade failure to abort the parent delete
 
-**Rule.** When erasing a subject's primary record must also erase dependent records, run the cascade from a `before delete` handler on the parent object — before the platform clears the foreign-key references the cascade needs to find the dependents. If the cascade fails partway through, rethrow the exception so the parent delete aborts too. Do not swallow a cascade failure and let the parent delete succeed anyway.
+**Rule.** When erasing a subject's primary record must also erase dependent records, run the cascade from a `before delete` handler on the parent object — before the platform clears the foreign-key references the cascade needs to find the dependents. If the cascade fails partway through, rethrow the exception so the parent delete aborts too. Do not swallow a cascade failure and let the parent delete succeed anyway. The trigger itself stays one line, per the trigger-framework rule in [architecture.md](../best-practices/architecture.md) — the cascade and its rethrow live in the handler's `beforeDelete` override, not in the trigger body.
 
 **Why.** `before delete` still has the parent's relationships intact, so the handler can reliably query "everything that points at this record" before that graph disappears. Rethrowing on failure matters because a partial cascade is worse than no cascade: the subject's primary record is gone, but some dependent record — still holding the subject's data — survives, invisible, with no parent left to reveal it exists. A silent partial cascade is exactly the compliance gap the erasure requirement exists to prevent; aborting the whole delete on cascade failure keeps the data intact and the failure visible instead of hiding it.
 
 ```apex
 trigger ContactTrigger on Contact (before delete) {
-    if (Trigger.isBefore && Trigger.isDelete) {
+    new ContactTriggerHandler().run();
+}
+```
+
+```apex
+public without sharing class ContactTriggerHandler extends TriggerHandler {
+    protected override void beforeDelete() {
         try {
             new ContactErasureCascadeHandler().eraseDependents(Trigger.old);
         } catch (Exception ex) {

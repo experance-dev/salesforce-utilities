@@ -111,7 +111,7 @@ List<Account> accounts = [
 **Why.** Two independent failure modes, both invisible until they fire:
 
 - **Compile size.** A formula's compiled size is capped at 5,000 bytes, and referencing another formula field adds *that field's entire compiled size* to yours — on every reference. Chains therefore grow multiplicatively, and the "compiled formula is too big to execute" error fires when someone edits a formula three links upstream of the one that breaks.
-- **Query cost.** Formula fields are not indexed; filtering on one in SOQL forces a full table scan. On a §9-scale object, that's the difference between a selective query and a timeout.
+- **Query cost.** Formula fields are not indexed by default; filtering on one in SOQL forces a full table scan unless it has been. Only *deterministic* formulas are even index-eligible, and getting one indexed still means filing a Salesforce Support request — it is not a Setup checkbox available at design time. On a §9-scale object, that gap between "not indexed" and "not self-service indexable" is the difference between a selective query and a timeout, discovered the expensive way if nobody planned for it.
 
 A stamped field contains the resulting value, not the formula — it costs one automation to maintain and is indexed, filterable, and inert to upstream formula edits. That trade is almost always correct past the first level of nesting.
 
@@ -125,7 +125,8 @@ Official documentation (verified during authoring):
 
 - <https://developer.salesforce.com/docs/atlas.en-us.api_meta.meta/api_meta/meta_globalvalueset.htm> — Global Value Set metadata (shared value sets, 1,000-value cap)
 - <https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/system_fields.htm> — system audit fields, SystemModstamp behavior, Set Audit Fields upon Record Creation
-- <https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/compound_fields_limitations.htm> — compound-field limitations (filterability, Bulk API, search)
+- <https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/compound_fields_limitations.htm> — compound-field limitations (filterability)
+- <https://developer.salesforce.com/docs/atlas.en-us.caf_dev_guide.meta/caf_dev_guide/caf_dev_limitations.htm> — Custom Address Fields requirements and limitations (Bulk API export, street-only search indexing — §8's claims live here, not on the general compound-fields page)
 - <https://developer.salesforce.com/docs/atlas.en-us.field_history_retention.meta/field_history_retention/field_history_retention_intro.htm> — standard tracking (20 fields, 18–24 months) vs. Field Audit Trail (200 fields, `HistoryRetentionPolicy`, `FieldHistoryArchive`)
 - <https://developer.salesforce.com/docs/atlas.en-us.salesforce_formula_size_tipsheet.meta/salesforce_formula_size_tipsheet/reducing_formula_compile_size.htm> — 5,000-byte compile limit, referenced-formula expansion
 - <https://github.com/forcedotcom/sf-skills> — SOQL anti-patterns (formula fields unindexed; filter on base or stamped fields)

@@ -90,11 +90,11 @@ public with sharing class OrderDiscountFloorInvocable {
 
 TODO: this library does not yet ship an invocable wrapper around `Logger`; until it lands, adopting this rule means adding a thin `@InvocableMethod` class in your org that delegates to `Logger`.
 
-## 10. Name flows on a fixed grammar; compose repeated logic as subflows
+## 10. Flow naming lives in naming.md §7; this file adds only subflow-extraction discipline
 
-**Rule.** Flow API names follow `<Object>_<TypeCode>_<VerbPhrase>` — e.g. `Order_RTF_SetRegionDefaults`, `Case_SCR_CloseWizard`. Type codes: `RTF` (record-triggered), `SCR` (screen), `SFL` (subflow), `SCH` (scheduled), `PE` (platform-event). The Description field is filled on every flow and on every element whose purpose isn't obvious from its label; element labels start with a verb. Logic used by more than one flow is extracted into a subflow, never copied.
+**Rule.** Flow API names, description requirements, and element-label discipline follow [naming.md §7](./naming.md) — object first, flow type second, behavior last, spelled out rather than coded (`Case_Screen_CloseWizard`, not `Case_SCR_CloseWizard`). What this file adds on top of that grammar: logic used by more than one flow is extracted into a subflow, never copied.
 
-**Why.** Flows have no package structure — the name is the folder. Setup and Flow Trigger Explorer list flows flat, so object-first names are the only findability mechanism an org gets, and descriptions are the only in-canvas documentation the next maintainer sees. Duplicated canvas logic drifts exactly the way duplicated code does, except no diff tool shows it; the subflow is the flow analog of the shared service method.
+**Why.** Naming and description discipline are governed once, in naming.md §7, so an author checks a single file instead of reconciling two versions of the same rule. Duplicated canvas logic drifts exactly the way duplicated code does, except no diff tool shows it; the subflow is the flow analog of the shared service method.
 
 ## 11. The object's automation inventory is documented — hard rule
 
@@ -102,8 +102,8 @@ TODO: this library does not yet ship an invocable wrapper around `Logger`; until
 
 | Phase | Automation | Trigger Order | Owner | Purpose |
 | --- | --- | --- | --- | --- |
-| Before-save | `Order_RTF_SetRegionDefaults` | 10 | Sales ops team | Default region and currency stamps |
-| Before-save | `Order_RTF_ApplyDiscountFloor` | 20 | Pricing team | Clamp discount to the approved floor |
+| Before-save | `Order_BeforeSave_SetRegionDefaults` | 10 | Sales ops team | Default region and currency stamps |
+| Before-save | `Order_BeforeSave_ApplyDiscountFloor` | 20 | Pricing team | Clamp discount to the approved floor |
 | After-save | `OrderTrigger` → `OrderTriggerHandler` | — | Platform team | Fulfillment cascade, integration events |
 
 **Why.** Entry conditions, Trigger Order values, and handler hooks are each readable individually, but the platform offers no single view of "everything that fires when this record saves" that includes ownership. The inventory is that view. It is also what makes §1's density decision repeatable — the next person deciding where a requirement lands starts by reading the table, not by archaeology in Setup.
