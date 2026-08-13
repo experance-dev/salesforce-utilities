@@ -1,6 +1,6 @@
 # PersonaMatrix — Persona-Matrix Testing for Apex
 
-**Status:** Draft v2 — three-lens adversarial review folded (platform facts · consumer ergonomics · standards conformance)
+**Status:** Draft v3 — three-lens adversarial review folded; PR #5 maintainer review folded (provisioning contract, permission-set groups, permutation invariance, async scope, ledger guarantees, prerequisite wording)
 **Module:** `utilities/testing/persona/`
 **Target release:** v1.1.0
 **Author:** David Wood
@@ -29,22 +29,25 @@ the UI level, closed-source.
 PersonaMatrix is that runner: declare the scenario once, declare the personas and what each one
 should experience, and let the framework execute, collect, and report.
 
-## 2. Why this only works on a user-mode codebase
+## 2. Which expectations need which enforcement
 
 `System.runAs` switches the context user and enforces **record sharing**. Object CRUD and
 field-level security bite only on code paths that enforce them — `WITH USER_MODE` SOQL,
-`AccessLevel.USER_MODE` DML, `Security.stripInaccessible`. On a codebase that runs in system mode,
-a persona matrix would pass for every persona and prove nothing.¹
+`AccessLevel.USER_MODE` DML, `Security.stripInaccessible`.¹
 
-This library's stack is user-mode throughout: `DMLManager` pre-checks CRUD/FLS and executes DML at
-`AccessLevel.USER_MODE`; [security-sharing §2](../standards/security-sharing.md) requires
-`WITH USER_MODE` on queries and §3 routes DML through `DMLManager`. PersonaMatrix is therefore
-honest here: a denied persona actually gets denied, with a typed exception the test can assert on.
+The prerequisites are therefore **expectation-specific** (measurable per test, not per codebase):
 
-**Prerequisite (measurable):** code under a PersonaMatrix test must perform its SOQL with
-`WITH USER_MODE` and its DML through `DMLManager` (or equivalent `USER_MODE` access level). A
-scenario exercising system-mode code paths is out of scope for persona asserts and the test class
-must not claim persona coverage for it.
+- **Row-visibility expectations** (`returnedRows`, `returnedRowIds`, `seesNoRows`) require the
+  scenario's read path to enforce record sharing — `WITH USER_MODE`, or a `with sharing` call
+  path under `runAs`. This works even where that path does not enforce CRUD/FLS.
+- **CRUD/FLS-denial expectations** (`denied(...)`) require explicit enforcement on the code
+  path — `USER_MODE` SOQL/DML, `DMLManager`, or `stripInaccessible`. On a system-mode path a
+  denial expectation is unfalsifiable and must not be declared.
+
+This library's stack enforces both everywhere: `DMLManager` pre-checks CRUD/FLS and executes DML
+at `AccessLevel.USER_MODE`; [security-sharing §2](../standards/security-sharing.md) requires
+`WITH USER_MODE` on queries and §3 routes DML through `DMLManager`. A matrix over code with
+neither enforcement passes for every persona and proves nothing.
 
 > ¹ The current [runAs doc](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_testing_tools_runas.htm)
 > reads "The runAs method enforces record sharing. User permissions and field-level permissions
@@ -68,27 +71,34 @@ These four constraints dictate the shape of the API. They are not preferences.
    reset limits — a five-persona matrix shares one 100-SOQL budget. Additionally,
    [every call to `runAs` counts as a DML statement](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_testing_tools_runas.htm)
    against the 150-statement cap. The runner records per-persona limit consumption in its report
-   (taking its pre-snapshot *inside* the `runAs` block, so the `runAs` call itself is not
-   attributed to the scenario), and §6.5 defines the fallback for heavy scenarios.
+   (taking its pre-snapshot *inside* the `runAs` block, so the `runAs` charge is not attributed
+   to the *scenario*), while the ledger's totals line keeps those charges in the
+   denominator-facing number (§6.3) — the transaction pays them either way. §6.5 defines the
+   fallback for heavy scenarios.
 4. **Mixed-DML.** `User` and `PermissionSetAssignment` are
    [setup objects](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_dml_mixed_dml_operations.htm):
-   their DML cannot share a transaction with DML on non-setup (standard/custom) objects. All
-   persona-user fabrication therefore runs under `System.runAs(adminUser)` via `TestFactory`'s
-   existing `getAdminUser()` seam, per
-   [testing-discipline §1.3](../standards/testing-discipline.md) — setup-object DML under an
-   explicit admin context, separated from record DML.
+   their DML cannot share a transaction with DML on non-setup (standard/custom) objects.
+   Provisioning therefore builds every `User` in memory first, then performs **one bulk
+   setup-object operation** — insert users, then insert all permission-set/group assignments —
+   under `System.runAs(adminUser)`, per
+   [testing-discipline §1.3](../standards/testing-discipline.md): setup-object DML under an
+   explicit admin context, separated from record DML, with one clean mixed-DML boundary instead
+   of one per persona.
 
 ## 4. Components
 
-All classes live in `utilities/testing/persona/`. Interfaces use bare names — no `I` prefix —
-per [naming.md §1](../standards/naming.md), which reserves the prefix for interface+`Impl` DI
-pairs; the custom-assert interface is named `Check`, not `Assert`, so it can never shadow
-`System.Assert` inside the class that hosts it.
+All classes live in `utilities/testing/persona/`. Interfaces use bare names — no `I` prefix.
+[naming.md](../standards/naming.md)'s current opening rule ("interfaces carry an `I` prefix") is
+broader than the repo's own precedent (`TestFactory.FieldDefaults` vs `DMLManager.IDML`), so this
+PR carries a §11 canon amendment making the split explicit: `I` prefix for interface+`Impl` DI
+pairs, bare names for consumer-implemented callback/strategy interfaces. The custom-assert
+interface is named `Check`, not `Assert`, so it can never shadow `System.Assert` inside the class
+that hosts it.
 
 | Class | Kind | Role |
 | --- | --- | --- |
-| `PersonaMatrix` | `@IsTest` class | Fluent builder + runner. Entry point: `PersonaMatrix.of(scenario)`. Inner `PersonaStep` stage makes the grammar compile-safe (§6.1). |
-| `Persona` | `@IsTest` class | **Immutable** value object: a persona's name (its identity key), profile, role, permission-set ladder, parameters. Produced by `PersonaBuilder.build()`; registry constants hold these. |
+| `PersonaMatrix` | `@IsTest` class | Fluent builder + runner + **provisioning owner** (§6.1). Entry point: `PersonaMatrix.of(scenario)`. Inner `PersonaStep` stage makes the grammar compile-safe (§6.1). |
+| `Persona` | `@IsTest` class | **Immutable** value object: a persona's name (its identity key), profile, role, permission-set-group and permission-set ladder, parameters. Produced by `PersonaBuilder.build()`; registry constants hold these. |
 | `PersonaBuilder` | `@IsTest` class | Mutable recipe, frozen by `build()`. `provision()` and `.persona()` accept `Persona` only — a builder is never a handle. |
 | `PersonaScenario` | interface | The story action under test. One method: `Object run(PersonaContext ctx)`. |
 | `PersonaContext` | `@IsTest` class | Handed to the scenario. Accessors: `getUser()`, `getPersonaName()`, `getParameter(String key)`. |
@@ -143,6 +153,12 @@ Semantics, precisely:
 - **`custom(PersonaOutcome.Check)`** — receives the `PersonaMatrixResult`; returns a `String`
   describing the mismatch, or `null` for pass. Escape hatch for `stripInaccessible` redaction
   checks, `getInaccessibleFields` inspection, and anything else v1 does not model.
+- **Refinement compatibility is validated.** `denied(...)` cannot carry `returnedRows` /
+  `returnedRowIds` / `returnedNonNull` (a scenario that throws returns nothing), and
+  `messageContains` requires `denied`. Any incompatible combination is a configuration error
+  raised at `run()` start, before any `runAs`.
+- **A `custom()` check that throws** is recorded as that persona's mismatch (check exception type
+  + message) — it never crashes the matrix or silences later personas.
 
 The denial surface on this stack is typed and predictable — that is a direct payoff of routing all
 DML through `DMLManager`:
@@ -185,12 +201,13 @@ private class QuoteAccessPersonaTest {
     }
 
     // Action scenario — CRUD assert (typed denial). Setup-data Ids ride scenario
-    // constructor state — the first-class way to inject them (§6.4).
+    // constructor state — the first-class way to inject them (§6.4). Write scenarios take
+    // PER-PERSONA targets so no persona's run can contaminate another's (§6.4).
     private class SubmitQuote implements PersonaScenario {
-        private final Id quoteId;
-        public SubmitQuote(Id quoteId) { this.quoteId = quoteId; }
+        private final Map<String, Id> quoteIdByPersona;
+        public SubmitQuote(Map<String, Id> quoteIdByPersona) { this.quoteIdByPersona = quoteIdByPersona; }
         public Object run(PersonaContext ctx) {
-            QuoteService.submit(this.quoteId);
+            QuoteService.submit(this.quoteIdByPersona.get(ctx.getPersonaName()));
             return null;
         }
     }
@@ -201,23 +218,27 @@ private class QuoteAccessPersonaTest {
         Map<String, User> users = PersonaMatrix.provision(new List<Persona>{
             MyOrgPersonas.SALES_REP, MyOrgPersonas.SALES_MANAGER, MyOrgPersonas.SUPPORT_AGENT
         });
-        TestFactory.createSObject(
-            new Quote__c(OwnerId = users.get('Sales Rep').Id), true);
+        // One rep-owned write target per persona, marked by Name for re-resolution in methods.
+        for (String personaName : users.keySet()) {
+            TestFactory.createSObject(
+                new Quote__c(Name = personaName, OwnerId = users.get('Sales Rep').Id), true);
+        }
     }
 
     @IsTest
     static void readQuotes_personaMatrix() {
         PersonaMatrix.of(new ReadQuotes())
-            .persona(MyOrgPersonas.SALES_REP)     .expect(PersonaOutcome.allowed().returnedRows(1))
-            .persona(MyOrgPersonas.SALES_MANAGER) .expect(PersonaOutcome.allowed().returnedRows(1)) // role hierarchy
+            .persona(MyOrgPersonas.SALES_REP)     .expect(PersonaOutcome.allowed().returnedRows(3)) // owner
+            .persona(MyOrgPersonas.SALES_MANAGER) .expect(PersonaOutcome.allowed().returnedRows(3)) // role hierarchy
             .persona(MyOrgPersonas.SUPPORT_AGENT) .expect(PersonaOutcome.seesNoRows())
             .run();
     }
 
     @IsTest
     static void submitQuote_personaMatrix() {
-        Id quoteId = [SELECT Id FROM Quote__c LIMIT 1].Id;  // test context, pre-runAs
-        PersonaMatrix.of(new SubmitQuote(quoteId))
+        Map<String, Id> targets = new Map<String, Id>();
+        for (Quote__c q : [SELECT Id, Name FROM Quote__c]) { targets.put(q.Name, q.Id); }
+        PersonaMatrix.of(new SubmitQuote(targets))
             .persona(MyOrgPersonas.SALES_REP)     .expect(PersonaOutcome.allowed())
             .persona(MyOrgPersonas.SUPPORT_AGENT) .expect(PersonaOutcome.denied(DMLManager.CRUDException.class))
             .run();
@@ -230,14 +251,32 @@ private class QuoteAccessPersonaTest {
 expectation without a persona, or a double `.expect()` does not compile. `run()` on an empty
 matrix throws a configuration error before any `runAs` executes.
 
-**Provisioning contract.** `PersonaMatrix.provision(List<Persona>)` returns
-`Map<String, User>` (persona name → fabricated user) and is the documented home for it:
-`@TestSetup`, so every test method reuses the users (user + permset DML is the slow part).
-`PersonaMatrix.userFor(Persona)` / `userFor(String name)` is the canonical lookup afterward —
-usable in `@TestSetup` and in test methods. Persona **name is a unique key**: re-provisioning an
-already-provisioned name is an idempotent no-op; `.persona()` with an unprovisioned name fails at
-`run()` start with a named configuration error ("Persona 'Sales Rep' not provisioned — call
-PersonaMatrix.provision in @TestSetup"). There is no lazy provisioning in v1.
+**Provisioning contract.** `PersonaMatrix` owns provisioning end to end — it does not lean on
+`TestFactory`'s user seams (`getAdminUser()` is private there, and per-persona insert-then-assign
+would multiply the mixed-DML boundary). `provision(List<Persona>)`:
+
+1. Resolves every profile, role, permission set, and permission-set group by **exact name**,
+   failing fast with a named error on zero rows or ambiguity — never `LIKE`; a security fixture
+   must be deterministic.
+2. Builds all `User` records in memory — each with a **deterministic username** derived from the
+   persona name (slug + reserved test domain, e.g. `sales-rep.persona@test.example.com`) —
+   applies `UserRoleId`, then performs one bulk setup-object operation under
+   `System.runAs(adminUser)`: insert users, insert all assignments (§3 item 4).
+3. Returns `Map<String, User>` (persona name → user). Provision in `@TestSetup`, so every test
+   method reuses the users (setup-object DML is the slow part).
+
+The deterministic username is the **durable lookup key**: static state does not survive between
+`@TestSetup` and test-method transactions, so `PersonaMatrix.userFor(Persona)` /
+`userFor(String name)` re-resolves by username query and works identically in `@TestSetup` and
+any test method.
+
+**Idempotency is definition-strict.** Re-provisioning a persona name whose live org state matches
+the full definition (profile, role, complete assignment ladder) is a no-op returning the existing
+user. The same name with a *different* definition is a **configuration conflict error** — two
+fixtures silently sharing one user is exactly the nondeterminism this framework exists to kill.
+`.persona()` with an unprovisioned name fails at `run()` start with a named configuration error
+("Persona 'Sales Rep' not provisioned — call PersonaMatrix.provision in @TestSetup"). There is no
+lazy provisioning in v1.
 
 ### 6.2 Execution order
 
@@ -248,7 +287,11 @@ block. For each persona it:
    block, so the `runAs` call's own DML-statement charge (§3.3) is not attributed to the scenario.
 2. Invokes `scenario.run(ctx)`, catching any exception.
 3. Snapshots `Limits` again; computes the delta.
-4. Evaluates the declared `PersonaOutcome` against the actual result into a `PersonaMatrixResult`.
+4. Checks for **async enqueues** (queueable/future deltas): the loop runner cannot attribute
+   async outcomes — queued work executes at `Test.stopTest()`, *after* the ledger — so an
+   enqueue is a configuration failure naming the persona and directing to the per-method form
+   (§6.5).
+5. Evaluates the declared `PersonaOutcome` against the actual result into a `PersonaMatrixResult`.
 
 No assert fires until every persona has run.
 
@@ -262,7 +305,7 @@ PersonaMatrix: 2 of 3 personas failed — scenario ReadQuotes
   [PASS] Sales Rep       allowed, 1 row(s), 4 SOQL / 1 DML / ~80ms CPU
   [FAIL] Sales Manager   expected allowed with 1 row(s); got 0 row(s)  (sharing gap?)
   [FAIL] Support Agent   expected denied(DMLManager.CRUDException); scenario COMPLETED — security gap
-  limits: 14/100 SOQL, 6/150 DML statements (excl. 3 runAs charges), total
+  limits: 14/100 SOQL · DML scenario 6 + runAs 3 = 9/150, total
 ```
 
 Design intent: a single red test tells the whole story; nobody re-runs the suite three times to
@@ -274,6 +317,13 @@ discover the failures one persona at a time. Mechanics:
 - The ledger message is capped at ~3,500 characters with a `(+N more lines — see debug log)` tail;
   the full ledger always goes to `System.debug`. (`ApexTestResult.Message` persists ~4,000 chars;
   no first-party citation, so §8 keeps an empirical cap test.)
+- Per-persona deltas exclude the `runAs` DML charge (§6.2); the totals line keeps it in the
+  denominator-facing number (`scenario 6 + runAs 3 = 9/150`) — the transaction pays it either
+  way.
+- **Ledger completeness has a hard boundary:** governor-limit breaches (`LimitException`) are
+  uncatchable and abort the transaction mid-matrix — personas after the breach never run and the
+  ledger never prints. The 50% guidance in §6.5 keeps matrices away from that cliff; it cannot
+  rescue one already over it.
 - On an all-pass matrix, `run()` returns `List<PersonaMatrixResult>` for further inspection.
   `runQuietly()` collects and returns results **without ever asserting** — for consumers building
   their own reporting.
@@ -287,12 +337,15 @@ discover the failures one persona at a time. Mechanics:
   Setup-data Ids reach the scenario as **constructor state** (the blessed pattern, §6.1);
   persona-trait parameters ride `Persona` definitions and surface via
   `PersonaContext.getParameter()`.
-- **The runner reuses the scenario instance and does not roll back data between personas —
-  declaration order is semantic.** A field the scenario mutates in persona A's run is visible in
-  persona B's; a record persona A submits stays submitted for persona B. For write scenarios,
-  prefer per-persona target records; `.rollbackBetweenPersonas()` (savepoint before each persona,
-  rollback after — savepoint/`runAs` interaction on the §10 verify list) is the opt-in
-  alternative.
+- **Permutation invariance is the contract: changing persona declaration order must not change
+  any persona's outcome.** The runner reuses the scenario instance and does not roll back data
+  between personas, so the contract is honored structurally: write scenarios take **per-persona
+  target records** (§6.1's `SubmitQuote` shows the shape) and scenario instance fields stay
+  effectively final. A matrix whose outcome depends on declaration order is a defect in the
+  test; the §8 order-permutation self-test proves the framework side of the contract.
+  (A savepoint-based `.rollbackBetweenPersonas()` was considered and deferred — §9: a savepoint
+  resets neither governor limits nor Apex statics, so the name would promise more isolation than
+  it delivers.)
 - **One scenario = one denial mode.** A scenario asserted with `denied(...)` acts
   unconditionally on known Ids; a scenario asserted with row counts only reads. A read-guarded
   write (`if (!visible.isEmpty()) submit(...)`) silently converts a CRUD denial into a
@@ -316,7 +369,10 @@ static void submitQuoteAs(Persona persona, PersonaOutcome expected) {
 ```
 
 **Guidance (measurable):** matrix-in-one-method up to the point any single test method exceeds 50%
-of a governor limit; per-method beyond that.
+of a governor limit; per-method beyond that. **Async scenarios** (queueable / future / batch)
+always use this form — wrap each single-persona `run()` in `Test.startTest()`/`stopTest()` and
+assert the async outcome after `stopTest()`; the loop runner rejects async enqueues outright
+(§6.2).
 
 ## 7. Persona definition — the portable split
 
@@ -344,9 +400,16 @@ public class MyOrgPersonas {
 ```
 
 Builder surface: `PersonaBuilder.named(String)` → `.profile(String)` (default
-`Minimum Access - Salesforce`) → `.role(String roleDeveloperName)` → `.permissionSet(String)`
-(chainable, one ladder entry per call — Apex has no varargs) → `.parameter(String, Object)` →
-`.build()`.
+`Minimum Access - Salesforce`) → `.role(String roleDeveloperName)` →
+`.permissionSetGroup(String)` / `.permissionSet(String)` (chainable, one ladder entry per call —
+Apex has no varargs) → `.parameter(String, Object)` → `.build()`.
+
+**Production personas prefer `.permissionSetGroup()`.** The permission standard keeps personas in
+permission-set groups; assigning the real PSG exercises muting behavior that a reconstruction
+from individual sets cannot, and avoids drift between the fixture and the org. `.permissionSet()`
+remains for direct or exceptional grants and library-internal fixtures. Provisioning calls
+`Test.calculatePermissionSetGroup(...)` before assignment so a PSG still in `Updating` state
+cannot flake a fixture (§10 verify item).
 
 Rules:
 
@@ -359,13 +422,14 @@ Rules:
   **fails fast** with a named error if the exact profile name resolves to zero rows ("profile X
   not found — override .profile(...)"); `Standard User` is the documented manual fallback, never
   an automatic one (and loose queries must not match `Minimum Access - API Only Integrations`).
-- **`PersonaBuilder` composes existing `TestFactory` machinery — no `TestFactory` changes
-  needed:** `createMinAccessUser(true)` (or `createTestUser(true, profileName)` for a non-default
-  profile) plus `assignPermSetToUser(user, name)` per ladder entry. It never touches the shared
-  `@TestVisible` `testUserPermissionSets` static (cross-test bleed). Usernames are uniquified on
-  the reserved `test.example.com` domain per
-  [testing-discipline §1.4](../standards/testing-discipline.md). Setup-object DML runs under
-  `System.runAs(adminUser)` via `TestFactory.getAdminUser()`, per §3 item 4.
+- **Provisioning is self-contained in `PersonaMatrix` — `TestFactory` is neither modified nor
+  depended on for users.** Its user seams don't fit: `getAdminUser()` is private,
+  `assignPermSetToUser` resolves via `LIKE … LIMIT 1` (a deterministic security fixture cannot
+  accept that), and per-persona insert-then-assign multiplies the mixed-DML boundary.
+  PersonaMatrix resolves everything by exact name, builds users in memory, and bulk-inserts under
+  its own admin-context seam (§6.1, §3 item 4). Usernames are deterministic per persona on the
+  reserved `test.example.com` domain per
+  [testing-discipline §1.4](../standards/testing-discipline.md).
 - **For orgs without a role hierarchy**, manager-style visibility is granted by inserting `Share`
   records to `userFor(persona).Id` in `@TestSetup` — which is exactly why `provision()` returns
   the user map.
@@ -397,7 +461,17 @@ schema:
 | Unprovisioned persona | any | `.persona()` never provisioned | configuration error before any `runAs` |
 | Ledger completeness | 3 personas, 2 rigged to fail | any | aggregate message contains all three lines |
 | Ledger cap | many personas, long details | any | message capped with `(+N more…)` tail; full ledger in debug log |
-| Limits accounting | any | scenario with known SOQL count | exact delta; `runAs` DML charges excluded |
+| Limits accounting | any | scenario with known SOQL count | exact delta; `runAs` DML charges excluded per-persona, included in totals |
+| Durable lookup | any | provision in `@TestSetup`, resolve via `userFor()` in a test method | same user resolved across the transaction boundary |
+| Idempotent re-provision | Library User | provision the identical definition twice | no-op; same user; no duplicate |
+| Conflicting re-provision | same name, different ladder | provision | configuration conflict error |
+| Permission-set resolution | rigged names | missing / ambiguous / namespaced permission set | named fail-fast error each |
+| PSG assignment | PSG persona | assign a group incl. a muted permission | grants AND mutes both honored |
+| Order permutation | write matrix run in both declaration orders | per-persona targets | identical per-persona outcomes both ways |
+| Custom check throws | any | `custom()` check throws deliberately | recorded as that persona's mismatch; later personas still run |
+| Incompatible refinements | any | `denied(...).returnedRows(1)` | configuration error at `run()` start |
+| Async rejection | any | scenario enqueues a queueable | configuration failure naming the persona |
+| Return shapes | Library User | each supported `List` shape, `Integer`, `null` | `returnedRows` semantics per §5 exactly |
 
 Denial-message fragments observed in these runs are the **only** sanctioned source for
 `messageContains` strings (§5).
@@ -414,6 +488,11 @@ violations (with the §11 naming-canon amendment landed); library coverage stays
 - **CMDT-driven persona registry** (`Test_Persona__mdt`). Attractive for admin-maintained ladders;
   deferred until a second consuming org proves the code-registry shape wrong.
 - **Lazy / mid-method provisioning.** Provision-in-`@TestSetup` is the only v1 path.
+- **`.rollbackBetweenPersonas()`.** A savepoint resets neither governor limits nor Apex statics,
+  and its `runAs` interaction is unverified — the name would promise isolation it can't deliver.
+  Permutation invariance via per-persona targets (§6.4) is the v1 answer.
+- **Async scenarios inside the loop runner.** Rejected at run time (§6.2); the per-method form
+  (§6.5) is the supported path.
 - **UI-level persona testing** (Provar's territory). This is an Apex-context framework.
 - **LWC/Jest side.** Jest has real parameterized tests; a thin per-persona wire-mock convention
   may become a standards entry, not library code.
@@ -436,9 +515,13 @@ Remaining — each changes code if wrong, all closable during implementation:
 2. Type-token comparison mechanics: `String.valueOf(Type)` / `Type.getName()` formatting for
    inner classes (`DMLManager.CRUDException`) vs `Exception.getTypeName()`, including namespace
    prefix behavior in managed contexts.
-3. `Database.setSavepoint()` / `rollback` interaction with `runAs` boundaries (gates
-   `.rollbackBetweenPersonas()`).
-4. `ApexTestResult.Message` effective length (~4,000 chars per third-party describes; no
+3. `Test.calculatePermissionSetGroup` behavior when the group is already `Updated`, and PSG
+   muting visibility under `runAs` — gates the `.permissionSetGroup()` self-tests.
+4. Deterministic-username collision behavior across test classes provisioning the same persona
+   name (usernames are org-unique; the §6.1 idempotency check must absorb this, not explode).
+5. Async-enqueue detection coverage: which `Limits` deltas reliably observe queueable / future /
+   batch enqueues inside `runAs`.
+6. `ApexTestResult.Message` effective length (~4,000 chars per third-party describes; no
    first-party citation) — the §8 ledger-cap test is the empirical check.
 
 ## 11. Naming, placement, versioning
@@ -453,6 +536,10 @@ Remaining — each changes code if wrong, all closable during implementation:
   `|Persona([A-Z][a-zA-Z0-9]*)?` and record the rationale in naming.md the way the
   `FieldNamingConventions` constants note is recorded. Without this amendment the §8 acceptance
   criterion is unachievable.
+- **Second same-PR canon amendment:** naming.md's interface rule ("interfaces carry an `I`
+  prefix") gains the explicit split the repo already practices — `I` prefix for interface+`Impl`
+  DI pairs (`DMLManager.IDML`); bare names for consumer-implemented callback/strategy interfaces
+  (`TestFactory.FieldDefaults`, `PersonaScenario`, `PersonaOutcome.Check`).
 - Headers: `@author David Wood`; the full [testing-discipline §1.1](../standards/testing-discipline.md)
   header set including `@see` on every `@IsTest` class (`PersonaMatrixTest` `@see PersonaMatrix`,
   `PersonaOutcome`, …); change-log discipline per
