@@ -4,7 +4,7 @@
  * @see PricebookUtil
  * @author David Wood
  * @since June 2024
- * @last May 2026 — Wave 6 migration + conformance
+ * @last May 2026 — migration + conformance refactor
  */
 @IsTest
 private without sharing class PricebookUtilTest {

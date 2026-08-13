@@ -5,7 +5,7 @@
  * @see QuiddityGuard
  * @author David Wood
  * @since July 2024
- * @last May 2026 — Wave 6 conformance
+ * @last May 2026 — conformance refactor
  */
 @isTest
 private without sharing class QuiddityGuardTest {

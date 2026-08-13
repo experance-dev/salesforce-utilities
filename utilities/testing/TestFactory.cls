@@ -5,7 +5,7 @@
  * @group Testing
  * @author David Wood
  * @since December 2020
- * @last May 2026 — Wave 2 conformance: sharing modifier, SYSTEM_MODE DML, exception base, header normalisation
+ * @last May 2026 — conformance refactor: sharing modifier, SYSTEM_MODE DML, exception base, header normalisation
  */
 @IsTest
 @SuppressWarnings(

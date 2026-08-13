@@ -5,7 +5,7 @@
  * @see LogCleanupContext
  * @author David Wood
  * @since November 2024
- * @last May 2026 — Wave 6 conformance
+ * @last May 2026 — conformance refactor
  */
 @IsTest
 public without sharing class LogCleanupContextTest {

@@ -7,7 +7,7 @@
  * @group DML
  * @author David Wood
  * @since May 2024
- * @last May 2026 — Wave 2 conformance refactor; corrected copy-paste log messages
+ * @last May 2026 — conformance refactor; corrected copy-paste log messages
  */
 public inherited sharing class DMLManagerInert extends DMLManager.SimpleDML {
   public override void dmlDelete(List<SObject> recordsToDelete) {

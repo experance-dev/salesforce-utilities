@@ -3,7 +3,7 @@
  * @group Testing
  * @author David Wood
  * @since June 2018
- * @last May 2026 — Wave 4 conformance: @isTest, without sharing, Database.SYSTEM_MODE DML, header cleanup.
+ * @last May 2026 — conformance refactor: @isTest, without sharing, Database.SYSTEM_MODE DML, header cleanup.
  */
 @isTest
 public without sharing class TestFactoryRig {

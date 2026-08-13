@@ -6,7 +6,7 @@
  *
  * @author David Wood
  * @since June 2024
- * @last May 2026 — Wave 6 conformance
+ * @last May 2026 — conformance refactor
  */
 @isTest
 public without sharing class UtilitiesTest {

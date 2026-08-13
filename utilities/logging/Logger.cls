@@ -8,6 +8,8 @@
  * @since September 2024
  * @author David Wood
  * @last May 2026 — conformance refactor
+ * @last August 2026 — logException no longer gated behind the printLogs debug flag;
+ *                      error-level output now always writes, matching the header contract
  */
 public inherited sharing class Logger {
   // ─── Core dispatch ───────────────────────────────────────────────────────────
@@ -148,9 +150,7 @@ public inherited sharing class Logger {
     String className,
     String methodName
   ) {
-    if (printLogs) {
-      logExceptionInternal(e, className, methodName);
-    }
+    logExceptionInternal(e, className, methodName);
   }
 
   // ─── Private helpers ──────────────────────────────────────────────────────────

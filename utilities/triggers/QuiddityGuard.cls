@@ -5,7 +5,7 @@
  * @group   Triggers
  * @author  Apex Recipes, David Wood
  * @since   June 2024
- * @last    May 2026 — Wave 3 conformance
+ * @last    May 2026 — conformance refactor
  */
 public without sharing class QuiddityGuard {
   /**
