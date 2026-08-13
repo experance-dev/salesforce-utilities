@@ -1,0 +1,12 @@
+{
+  "packageDirectories": [
+    {
+      "path": "utilities",
+      "default": true
+    }
+  ],
+  "name": "salesforce-utilities",
+  "namespace": "",
+  "sfdcLoginUrl": "https://login.salesforce.com",
+  "sourceApiVersion": "66.0"
+}

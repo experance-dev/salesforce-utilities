@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Log Setting</label>
+    <pluralLabel>Log Settings</pluralLabel>
+    <visibility>Public</visibility>
+    <description>Runtime configuration for Logger. The 'defaults' record's Print_Debug_Logs__c flag gates debug-level output verbosity.</description>
+</CustomObject>

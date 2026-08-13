@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Utilities Test User</label>
+    <description>Marker permission set identifying users created by TestFactory.createTestUser (TestFactoryDefaults.TEST_USER_PERMISSION). Object/field grants for consumer-org tests are added by the consumer, not here.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+</PermissionSet>

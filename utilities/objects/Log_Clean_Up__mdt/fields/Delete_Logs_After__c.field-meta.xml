@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Delete_Logs_After__c</fullName>
+    <label>Delete Logs After (Days)</label>
+    <type>Number</type>
+    <precision>4</precision>
+    <scale>0</scale>
+    <required>true</required>
+    <description>Retention window in days. Records older than this are eligible for purge.</description>
+</CustomField>

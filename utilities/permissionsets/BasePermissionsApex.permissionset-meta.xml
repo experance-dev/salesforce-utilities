@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Base Permissions Apex</label>
+    <description>Apex class access to the salesforce-utilities library for test users. Assigned by TestFactory.createTestUser.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <classAccesses><apexClass>DMLHelper</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>DMLManager</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>DMLManagerInert</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>GroupMemberEmailRetriever</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>SingleEmail</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>Logger</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>LogCleanupBatch</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>LogCleanupContext</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>LogCleanupScheduler</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>UtilPickLists</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>PricebookUtil</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>RestClient</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>StringBuilder</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>QuiddityGuard</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>QuiddityGuardInvocable</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>TriggerHandler</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>Utilities</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>UtilitiesHelper</apexClass><enabled>true</enabled></classAccesses>
+    <classAccesses><apexClass>UtilitiesModuleException</apexClass><enabled>true</enabled></classAccesses>
+</PermissionSet>
