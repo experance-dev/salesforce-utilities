@@ -10,7 +10,7 @@ Every class header carries:
 | `@group`       | Type / category (e.g. `Service`, `Domain`, `Selector`).       |
 | `@author`      | Author name.                                                  |
 | `@since`       | Existing date, or current month/year (e.g. `May 2026`).       |
-| `@last`        | Current date + brief change note; append to existing entries. |
+| `@last`        | Current date + brief change note; one entry per day (merge same-day entries), one line preferred, two max. |
 
 Comment groupings/sections, not lines.
 
@@ -69,7 +69,7 @@ public class OrderProcessorException extends OrderModuleException {
 
 ## Caching
 
-- Use **session platform cache** for state that genuinely needs to survive past the current transaction (e.g. a value computed once and reused by a later, separate transaction). Static class variables reset at the end of every transaction, so they're the wrong tool for that job — but they're the *right* tool for state scoped to a single transaction (a trigger recursion guard, a bypass flag checked only within the transaction that set it). Don't reach for platform cache just because a variable is `static`; reach for it when the state has to outlive the transaction.
+- Use **session platform cache** for state that genuinely needs to survive past the current transaction (e.g. a value computed once and reused by a later, separate transaction). Static class variables reset at the end of every transaction, so they're the wrong tool for that job — but they're the _right_ tool for state scoped to a single transaction (a trigger recursion guard, a bypass flag checked only within the transaction that set it). Don't reach for platform cache just because a variable is `static`; reach for it when the state has to outlive the transaction.
 
 ## Scheduling
 
