@@ -16,6 +16,7 @@
  * @author David Wood
  * @since June 2024
  * @last May 2026 — conformance refactor
+ * @last August 2026 — overload guard rebuilt: each registered constraint list now matches independently, so a types-only stub fires for calls with arguments
  */
 @isTest
 public without sharing class TestDouble implements System.StubProvider {
@@ -54,8 +55,9 @@ public without sharing class TestDouble implements System.StubProvider {
 
   /**
    * @description Required `StubProvider` callback.  Matches the incoming call
-   *              to a registered `Method` by name, then by param-list when the
-   *              method is overloaded, and delegates to `Method.handleCall()`.
+   *              to a registered `Method` by name, then by whichever constraint
+   *              lists the stub registered (param types, param names, args) —
+   *              each enforced independently — and delegates to `Method.handleCall()`.
    * @param stubbedObject     The object being stubbed.
    * @param stubbedMethodName The name of the method being called.
    * @param returnType        The declared return type.
@@ -75,18 +77,22 @@ public without sharing class TestDouble implements System.StubProvider {
     List<Object> listOfArgs
   ) {
     for (Method method : methods) {
-      // Case-insensitive name match first; skip to param disambiguation when needed.
-      if (method.name.toLowerCase() == stubbedMethodName.toLowerCase()) {
-        // Param lists are always equal in size (the platform guarantees it), so
-        // checking only listOfParamTypes.size() is sufficient for the guard.
-        if (
-          method.listOfParamTypes.size() > 0 &&
-          (method.listOfParamTypes != listOfParamTypes ||
-          method.listOfParamNames != listOfParamNames ||
-          method.listOfArgs != listOfArgs)
-        ) {
-          continue;
-        } else {
+      // Case-insensitive name match first; then apply any registered constraints.
+      if (method.name.equalsIgnoreCase(stubbedMethodName)) {
+        // The three constraint lists are independent — a stub may register any
+        // subset of them (types, names, args). Each list is enforced only when
+        // the caller registered it; an unregistered (empty) list never vetoes
+        // a match, so a types-only stub still fires for calls with arguments.
+        Boolean paramTypesMatch =
+          method.listOfParamTypes.isEmpty() ||
+          method.listOfParamTypes == listOfParamTypes;
+        Boolean paramNamesMatch =
+          method.listOfParamNames.isEmpty() ||
+          method.listOfParamNames == listOfParamNames;
+        Boolean argsMatch =
+          method.listOfArgs.isEmpty() ||
+          method.listOfArgs == listOfArgs;
+        if (paramTypesMatch && paramNamesMatch && argsMatch) {
           return method.handleCall();
         }
       }
@@ -112,7 +118,8 @@ public without sharing class TestDouble implements System.StubProvider {
     Boolean throwsException = false;
     // Message carried by the thrown TestDoubleException.
     String exceptionMessage = '';
-    // Overload-disambiguation: all three lists must match for the stub to fire.
+    // Overload-disambiguation: each registered (non-empty) list must match for
+    // the stub to fire; unregistered lists place no constraint on the call.
     List<Type> listOfParamTypes = new List<Type>();
     List<String> listOfParamNames = new List<String>();
     List<Object> listOfArgs = new List<Object>();

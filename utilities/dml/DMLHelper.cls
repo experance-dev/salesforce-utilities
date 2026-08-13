@@ -6,11 +6,13 @@
  * @author David Wood
  * @since May 2024
  * @last May 2026 — USER_MODE migration; conformance refactor
+ * @last August 2026 — explicit system-mode read in getExistingRecords; empty-list guard on merge CRUD check
  * @see DMLManager
  */
 @SuppressWarnings('PMD.ExcessivePublicCount')
 public inherited sharing class DMLHelper {
   /**
+   * @description Extracts the populated fields of a record as a name-to-value map.
    * @param obj The SObject to inspect.
    * @return A map of field names to their populated values (implicit nulls excluded).
    */
@@ -132,7 +134,18 @@ public inherited sharing class DMLHelper {
         ' FROM ' +
         objType.getDescribe().getName() +
         ' WHERE Id IN :seenIds';
-      result.putAll(Database.query(String.escapeSingleQuotes(query)));
+      // Deliberate SYSTEM_MODE read: this query exists to diff FLS-restricted fields against
+      // their stored values, so it must see exactly the fields the running user cannot —
+      // USER_MODE would strip the fields under inspection and defeat the check. Object and
+      // field names come from describe results, never caller input; escapeSingleQuotes on the
+      // assembled string is defense-in-depth only.
+      result.putAll(
+        Database.queryWithBinds(
+          String.escapeSingleQuotes(query),
+          new Map<String, Object>{ 'seenIds' => seenIds },
+          AccessLevel.SYSTEM_MODE
+        )
+      );
     }
     return result;
   }
@@ -221,10 +234,20 @@ public inherited sharing class DMLHelper {
 
   /**
    * @description Checks CRUD permission for both the master and merge-target objects before a merge.
+   *              No-ops with a warning when mergeList is null or empty, mirroring the
+   *              empty-collection guard in DMLManager.performDMLOperation.
    * @param masterObj The record that will survive the merge.
    * @param mergeList The records that will be consumed.
    */
   public static void checkCRUDForMerge(SObject masterObj, List<SObject> mergeList) {
+    if (mergeList == null || mergeList.isEmpty()) {
+      Logger.warn(
+        'There were no records to process',
+        'DMLHelper',
+        'checkCRUDForMerge'
+      );
+      return;
+    }
     DMLManager.checkCRUDPermission(
       new Set<SObjectType>{ masterObj.getSObjectType() },
       DMLManager.Operation.OP_UPDATE

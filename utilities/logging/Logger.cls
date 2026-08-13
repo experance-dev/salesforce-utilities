@@ -3,13 +3,21 @@
  *              Provides a simple interface to log messages with varying levels of severity.
  *              Supports logging the originating class and method names.
  *              The `printLogs` flag (driven by Log_Setting__mdt) gates debug-level output;
- *              info/warn/error always write. `logException` captures message + stack trace.
+ *              info/warn/error always write. `logException` captures the exception's
+ *              type name, message, and stack trace.
+ *
+ *              Durable-sink contract: error-severity entries additionally persist one
+ *              `Debug_Log__c` record via a system-mode insert wrapped in its own
+ *              try-catch, so logging can never break the host transaction — a failed
+ *              persistence degrades to debug-log output and is swallowed. Debug, info,
+ *              and warn entries remain debug-log-only until an org opts lower
+ *              severities into the sink.
  * @group Logger
  * @since September 2024
  * @author David Wood
  * @last May 2026 — conformance refactor
- * @last August 2026 — logException no longer gated behind the printLogs debug flag;
- *                      error-level output now always writes, matching the header contract
+ * @last August 2026 — error path hardened: logException ungated from the printLogs flag, captures
+ *                      the exception type name, and persists a Debug_Log__c record as the durable sink
  */
 public inherited sharing class Logger {
   // ─── Core dispatch ───────────────────────────────────────────────────────────
@@ -30,6 +38,9 @@ public inherited sharing class Logger {
   ) {
     String logMessage = formatLogMessage(level, message, className, methodName);
     storeLog(level, logMessage);
+    if (level == System.LoggingLevel.ERROR) {
+      persistErrorLog(message, className, methodName);
+    }
   }
 
   /**
@@ -197,6 +208,8 @@ public inherited sharing class Logger {
         '.' +
         methodName +
         ': ' +
+        e.getTypeName() +
+        ': ' +
         e.getMessage() +
         '\nStackTrace: ' +
         e.getStackTraceString();
@@ -263,5 +276,52 @@ public inherited sharing class Logger {
   @TestVisible
   private static void storeLog(System.LoggingLevel level, String logMessage) {
     System.debug(level, logMessage);
+  }
+
+  /**
+   * @description Persists one `Debug_Log__c` record for an error-severity entry — the
+   *              library's durable sink. Side effect: issues one DML insert in the
+   *              caller's transaction (it counts against the caller's DML limits and,
+   *              like any DML, precludes a same-transaction callout issued afterwards).
+   *              Contract: this method can never break the host transaction — the
+   *              insert is wrapped in its own try-catch, and a persistence failure
+   *              degrades to a debug-log warning and is swallowed.
+   *
+   *              The insert deliberately bypasses `DMLManager` for two reasons:
+   *              `Logger` sits beneath the DML layer (`DMLManager` logs through
+   *              `Logger`, so routing back through it would create a dependency
+   *              cycle), and log persistence must succeed regardless of the running
+   *              user's CRUD/FLS — hence the direct `AccessLevel.SYSTEM_MODE` insert.
+   *
+   * @param message    The raw (unformatted) log message; truncated to the field length.
+   * @param className  The originating class name, when the caller supplied one.
+   * @param methodName The originating method name, when the caller supplied one.
+   */
+  @TestVisible
+  private static void persistErrorLog(
+    String message,
+    String className,
+    String methodName
+  ) {
+    try {
+      // SYSTEM_MODE bypass is intentional — see method comment above.
+      Database.insert( //NOPMD
+        new Debug_Log__c(
+          Message__c = message?.abbreviate(32768),
+          Class_Name__c = className?.abbreviate(255),
+          Method_Name__c = methodName?.abbreviate(255),
+          Log_Level__c = 'Error'
+        ),
+        AccessLevel.SYSTEM_MODE
+      );
+    } catch (Exception persistFailure) {
+      // Warn stays debug-log-only, so this cannot recurse back into persistence.
+      log(
+        System.LoggingLevel.WARN,
+        'Debug_Log__c persistence failed: ' + persistFailure.getTypeName(),
+        'Logger',
+        'persistErrorLog'
+      );
+    }
   }
 }

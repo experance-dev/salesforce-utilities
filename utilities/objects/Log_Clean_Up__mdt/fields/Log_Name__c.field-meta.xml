@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Log_Name__c</fullName>
+    <label>Log Name</label>
+    <type>Text</type>
+    <length>255</length>
+    <required>true</required>
+    <description>API name of the log SObject to purge (e.g. My_Log__c).</description>
+</CustomField>

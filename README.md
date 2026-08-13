@@ -10,10 +10,10 @@ Everything lives under [utilities/](utilities/), grouped by purpose:
 
 | Folder | Contents |
 | --- | --- |
-| [utilities/dml/](utilities/dml/) | `DMLManager`, `DMLHelper`, `DMLManagerError`, `DMLManagerInert`, `ConversionFactory` — wrap DML with partial-success / error-collection semantics. |
+| [utilities/dml/](utilities/dml/) | `DMLManager`, `DMLHelper`, `DMLManagerInert` — one audited DML chokepoint with USER_MODE/SYSTEM_MODE enforcement; `DMLManagerErrorStub` — error-injecting test stub. |
 | [utilities/triggers/](utilities/triggers/) | `TriggerHandler` — standard trigger framework. `QuiddityGuard` / `QuiddityGuardInvocable` — execution-context gating. |
 | [utilities/logging/](utilities/logging/) | `Logger` plus [`LogCleanUp/`](utilities/logging/LogCleanUp/) — batchable + schedulable log retention. |
-| [utilities/testing/](utilities/testing/) | `TestFactory`, `TestFactoryDefaults`, `TestFactoryRig`, `TestDouble`, `HttpCalloutMockFactory`, `LiveTest`. |
+| [utilities/testing/](utilities/testing/) | `TestFactory`, `TestFactoryDefaults`, `TestDouble`, `HttpCalloutMockFactory` — portable test-data factory, stub framework, and request-capturing callout mock. |
 | [utilities/rest/](utilities/rest/) | `RestClient` — outbound HTTP callout helper. |
 | [utilities/email/](utilities/email/) | `SingleEmail`, `GroupMemberEmailRetriever`. |
 | [utilities/strings/](utilities/strings/) | `StringBuilder`. |

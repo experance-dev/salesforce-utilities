@@ -1,201 +1,179 @@
 /**
- * @description Test class for LogCleanupBatch.
- * Validates that old logs are deleted as expected.
+ * @description Tests for `LogCleanupBatch` — seeds library-owned `Debug_Log__c`
+ *              fixtures with back-dated `CreatedDate` values and verifies
+ *              age-based purging, the `Do_Not_Delete__c` opt-out, and
+ *              log-and-continue behavior when a configured object cannot be
+ *              queried. Fixtures are deterministic: each carries a marker in
+ *              `Method_Name__c` and is back-dated by its own record Id — no
+ *              ORDER BY CreatedDate ties, no foreign schema.
  * @group LogCleanup
  * @see LogCleanupBatch
  * @author David Wood
  * @since November 2024
  * @last May 2026 — conformance refactor
+ * @last August 2026 — rewritten against library-owned Debug_Log__c with
+ *                      deterministic Id-keyed fixtures
  */
 @IsTest
-public without sharing class LogCleanupBatchTest {
-  @TestVisible
-  static final Integer EXPECTED_REMAINING_BLOCK_TRIGGER_LOGS = 5; // half of the logs should be deleted
-  @TestVisible
-  static final Integer EXPECTED_REMAINING_ATM_ENDPOINT_LOGS = 10;
-  @TestVisible
-  static final Map<String, Integer> MOCK_RETENTION_MAP = new Map<String, Integer>{
-    'Block_Trigger_Log__c' => 14,
-    'ATM_Endpoint_Log__c' => 7
-  };
+private without sharing class LogCleanupBatchTest {
+  private static final Integer RETENTION_DAYS = 30;
+  private static final Integer OLD_DELETABLE_COUNT = 6;
+  private static final Integer OLD_PROTECTED_COUNT = 2;
+  private static final Integer RECENT_COUNT = 3;
 
-  @TestVisible
+  private static final String MARKER_OLD_DELETABLE = 'OLD_DELETABLE';
+  private static final String MARKER_OLD_PROTECTED = 'OLD_PROTECTED';
+  private static final String MARKER_RECENT = 'RECENT';
+
   @TestSetup
   static void setup() {
-    // Create test user
-    TestFactory.createTestUser(true, 'System Administrator');
+    // Setup-object DML (the User insert) is wrapped in System.runAs(admin)
+    // inside the factory; fixture DML runs as the test's own running user.
+    User runningUser = TestFactory.createTestUser();
 
-    Integer blockRetentionDays = MOCK_RETENTION_MAP.get('Block_Trigger_Log__c');
-    Integer atmRetentionDays = MOCK_RETENTION_MAP.get('ATM_Endpoint_Log__c');
-
-    List<Block_Trigger_Log__c> blockTriggerLogs = new List<Block_Trigger_Log__c>();
-    for (Integer i = 0; i < 10; i++) {
-      Block_Trigger_Log__c log = new Block_Trigger_Log__c();
-      blockTriggerLogs.add(log);
-    }
-    DMLManager.insertAsSystem(blockTriggerLogs);
-
-    // Set CreatedDate for Block_Trigger_Log__c records
-    List<Block_Trigger_Log__c> logsToUpdate = [
-      SELECT Id
-      FROM Block_Trigger_Log__c
-    ];
-    Integer index = 0;
-    for (Block_Trigger_Log__c log : logsToUpdate) {
-      DateTime createdDate;
-      if (Math.mod(index, 2) == 0) {
-        // Even indices are old logs
-        createdDate = DateTime.now().addDays(-blockRetentionDays - 1);
-      } else {
-        // Odd indices are recent logs
-        createdDate = DateTime.now().addDays(-blockRetentionDays + 1);
+    System.runAs(runningUser) {
+      List<Debug_Log__c> fixtures = new List<Debug_Log__c>();
+      for (Integer i = 0; i < OLD_DELETABLE_COUNT; i++) {
+        fixtures.add(buildFixture(MARKER_OLD_DELETABLE, false));
       }
-      Test.setCreatedDate(
-        log.Id,
-        DateTime.newInstance(createdDate.date(), Time.newInstance(0, 0, 0, 0))
-      );
-      index++;
-    }
-
-    // For ATM_Endpoint_Log__c
-    List<ATM_Endpoint_Log__c> atmEndpointLogs = new List<ATM_Endpoint_Log__c>();
-    for (Integer i = 0; i < 15; i++) {
-      ATM_Endpoint_Log__c log;
-      if (Math.mod(i, 3) == 0) {
-        // Old deletable log
-        log = new ATM_Endpoint_Log__c(Do_Not_Delete__c = false);
-      } else if (Math.mod(i, 3) == 1) {
-        // Old protected log
-        log = new ATM_Endpoint_Log__c(Do_Not_Delete__c = true);
-      } else {
-        // Recent log
-        log = new ATM_Endpoint_Log__c(Do_Not_Delete__c = false);
+      for (Integer i = 0; i < OLD_PROTECTED_COUNT; i++) {
+        fixtures.add(buildFixture(MARKER_OLD_PROTECTED, true));
       }
-      atmEndpointLogs.add(log);
-    }
-    DMLManager.insertAsSystem(atmEndpointLogs);
-
-    // Set CreatedDate for ATM_Endpoint_Log__c records
-    List<ATM_Endpoint_Log__c> atmLogsToUpdate = [
-      SELECT Id, Do_Not_Delete__c
-      FROM ATM_Endpoint_Log__c
-      ORDER BY CreatedDate ASC
-    ];
-    index = 0;
-    for (ATM_Endpoint_Log__c log : atmLogsToUpdate) {
-      DateTime createdDate;
-      if (Math.mod(index, 3) == 2) {
-        // Recent log
-        createdDate = DateTime.now().addDays(-atmRetentionDays + 1);
-      } else {
-        // Old log
-        createdDate = DateTime.now().addDays(-atmRetentionDays - 1);
+      for (Integer i = 0; i < RECENT_COUNT; i++) {
+        fixtures.add(buildFixture(MARKER_RECENT, false));
       }
-      Test.setCreatedDate(
-        log.Id,
-        DateTime.newInstance(createdDate.date(), Time.newInstance(0, 0, 0, 0))
-      );
-      index++;
+      DMLManager.insertAsSystem(fixtures);
+
+      // Back-date each fixture keyed by its own Id and marker — deterministic,
+      // no reliance on insert order or CreatedDate sorting.
+      Datetime oldTimestamp = Datetime.now().addDays(-(RETENTION_DAYS + 5));
+      Datetime recentTimestamp = Datetime.now().addDays(-(RETENTION_DAYS - 5));
+      for (Debug_Log__c fixture : fixtures) {
+        Test.setCreatedDate(
+          fixture.Id,
+          fixture.Method_Name__c == MARKER_RECENT
+            ? recentTimestamp
+            : oldTimestamp
+        );
+      }
     }
   }
 
-  /**
-   * @description Tests the execution of LogCleanupBatch to ensure logs are deleted as expected.
-   */
+  private static Debug_Log__c buildFixture(String marker, Boolean doNotDelete) {
+    return (Debug_Log__c) TestFactory.createSObject(
+      new Debug_Log__c(
+        Message__c = 'LogCleanupBatchTest fixture — ' + marker,
+        Class_Name__c = 'LogCleanupBatchTest',
+        Method_Name__c = marker,
+        Log_Level__c = 'Error',
+        Do_Not_Delete__c = doNotDelete
+      )
+    );
+  }
+
   @IsTest
-  static void testLogCleanupBatchExecution() {
-    System.runAs(TestFactory.getTestUser('System Administrator')) {
-      // Create mock context
-      MockLogCleanupContext mockContext = new MockLogCleanupContext(
-        MOCK_RETENTION_MAP
-      );
+  static void testBatchPurgesOldDeletableRowsOnly() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      Set<Id> expectedSurvivorIds = new Map<Id, Debug_Log__c>(
+          [
+            SELECT Id
+            FROM Debug_Log__c
+            WHERE Method_Name__c != :MARKER_OLD_DELETABLE
+          ]
+        )
+        .keySet();
 
       Test.startTest();
-      // Execute batch with mock context
-      Database.executeBatch(new LogCleanupBatch(mockContext), 200);
+      Database.executeBatch(
+        new LogCleanupBatch(
+          new MockLogCleanupContext(
+            new Map<String, Integer>{ 'Debug_Log__c' => RETENTION_DAYS }
+          )
+        ),
+        200
+      );
       Test.stopTest();
 
-      // Assertions
-      Integer remainingBlockTriggerLogCount = [
-        SELECT COUNT()
-        FROM Block_Trigger_Log__c
-      ];
-      Assert.areEqual(
-        EXPECTED_REMAINING_BLOCK_TRIGGER_LOGS,
-        remainingBlockTriggerLogCount,
-        'Expected the correct number of Block Trigger Logs to remain.'
+      Map<Id, Debug_Log__c> survivors = new Map<Id, Debug_Log__c>(
+        [SELECT Id FROM Debug_Log__c]
       );
-
-      Integer remainingAtmEndpointLogCount = [
-        SELECT COUNT()
-        FROM ATM_Endpoint_Log__c
-      ];
       Assert.areEqual(
-        EXPECTED_REMAINING_ATM_ENDPOINT_LOGS,
-        remainingAtmEndpointLogCount,
-        'Expected the correct number of ATM Endpoint Logs to remain.'
+        OLD_PROTECTED_COUNT + RECENT_COUNT,
+        survivors.size(),
+        'Only rows past retention without the Do_Not_Delete__c opt-out may be purged.'
+      );
+      Assert.areEqual(
+        expectedSurvivorIds,
+        survivors.keySet(),
+        'Exactly the protected and recent rows must survive the purge.'
       );
     }
   }
 
-  /**
-   * @description Negative test for LogCleanupBatch to ensure exceptions are handled properly.
-   * Triggers an exception by using an invalid log object name.
-   */
   @IsTest
-  static void testLogCleanupBatchExceptionHandling() {
-    System.runAs(TestFactory.getTestUser('System Administrator')) {
-      // Create mock context with an invalid log name to trigger an exception
-      Map<String, Integer> invalidMockRetentionMap = new Map<String, Integer>{
-        'Invalid_Log__c' => 10 // 'Invalid_Log__c' does not exist and should cause SOQL exception
+  static void testBatchContinuesPastUnqueryableObject() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      Map<String, Integer> retentionWithBadObject = new Map<String, Integer>{
+        'Not_A_Real_Object__c' => 10,
+        'Debug_Log__c' => RETENTION_DAYS
       };
-      MockLogCleanupContext mockContext = new MockLogCleanupContext(
-        invalidMockRetentionMap
-      );
 
       Test.startTest();
-      // Execute batch with mock context that should cause an exception
-      Database.executeBatch(new LogCleanupBatch(mockContext), 200);
+      Database.executeBatch(
+        new LogCleanupBatch(new MockLogCleanupContext(retentionWithBadObject)),
+        200
+      );
       Test.stopTest();
 
-      // Since the exception is caught inside the batch, the test should not fail
-      // Verify that the expected counts remain unchanged
-      Integer remainingBlockTriggerLogCount = [
-        SELECT COUNT()
-        FROM Block_Trigger_Log__c
-      ];
       Assert.areEqual(
-        10,
-        remainingBlockTriggerLogCount,
-        'Expected the correct number of Block Trigger Logs to remain after exception.'
+        0,
+        [
+          SELECT COUNT()
+          FROM Debug_Log__c
+          WHERE Method_Name__c = :MARKER_OLD_DELETABLE
+        ],
+        'Old deletable rows must still purge after the unqueryable object is logged and skipped.'
       );
-
-      Integer remainingAtmEndpointLogCount = [
-        SELECT COUNT()
-        FROM ATM_Endpoint_Log__c
-      ];
       Assert.areEqual(
-        15,
-        remainingAtmEndpointLogCount,
-        'Expected the correct number of ATM Endpoint Logs to remain after exception.'
+        1,
+        [
+          SELECT COUNT()
+          FROM Debug_Log__c
+          WHERE Class_Name__c = 'LogCleanupBatch' AND Method_Name__c = 'start'
+        ],
+        'The unqueryable object failure must land in the durable sink via Logger.logException.'
       );
     }
-
   }
 
-  /**
-   * @description Test to ensure the default constructor of LogCleanupBatch initializes correctly.
-   * Covers the lines where the default constructor is used.
-   */
   @IsTest
-  static void testLogCleanupBatchDefaultConstructor() {
-    System.runAs(TestFactory.getTestUser('System Administrator')) {
-      // Instantiate LogCleanupBatch using the default constructor
+  static void testBatchWithNoConfiguredObjectsIsANoOp() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      Test.startTest();
+      Database.executeBatch(
+        new LogCleanupBatch(
+          new MockLogCleanupContext(new Map<String, Integer>())
+        ),
+        200
+      );
+      Test.stopTest();
+
+      Assert.areEqual(
+        OLD_DELETABLE_COUNT + OLD_PROTECTED_COUNT + RECENT_COUNT,
+        [SELECT COUNT() FROM Debug_Log__c],
+        'With no configured objects the batch must delete nothing.'
+      );
+    }
+  }
+
+  @IsTest
+  static void testDefaultConstructorUsesProductionContext() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
       LogCleanupBatch batchInstance = new LogCleanupBatch();
-      Assert.areNotEqual(
-        null,
+
+      Assert.isNotNull(
         batchInstance,
-        'Batch instance should be instantiated using the default constructor.'
+        'The default constructor must build a batch wired to the production LogCleanupContext.'
       );
     }
   }

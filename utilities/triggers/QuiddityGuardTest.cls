@@ -6,6 +6,7 @@
  * @author David Wood
  * @since July 2024
  * @last May 2026 — conformance refactor
+ * @last August 2026 — direct coverage for the SOAP and Bulk API helper checks
  */
 @isTest
 private without sharing class QuiddityGuardTest {
@@ -62,6 +63,68 @@ private without sharing class QuiddityGuardTest {
       Assert.isFalse(
         QuiddityGuard.isAcceptableQuiddity(QuiddityGuard.trustedQuiddities),
         'Expected Future quiddity to not be in trusted quiddities list'
+      );
+
+      Test.stopTest();
+    }
+  }
+
+  /**
+   * @description Positive path for the SOAP and Bulk API helpers: each returns
+   *              true when the injected quiddity matches its channel.
+   */
+  @isTest
+  static void testSoapAndBulkApiHelpersIdentifyTheirQuiddities() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      Test.startTest();
+
+      QuiddityGuard.testQuiddityOverride = Quiddity.SOAP;
+      Assert.isTrue(
+        QuiddityGuard.isSoapQuiddity(),
+        'Expected isSoapQuiddity to return true for the SOAP quiddity'
+      );
+
+      QuiddityGuard.testQuiddityOverride = Quiddity.BULK_API;
+      Assert.isTrue(
+        QuiddityGuard.isBulkAPIQuiddity(),
+        'Expected isBulkAPIQuiddity to return true for the BULK_API quiddity'
+      );
+      Assert.isTrue(
+        QuiddityGuard.isApiQuiddity(),
+        'Expected BULK_API to be classified as an API quiddity'
+      );
+
+      Test.stopTest();
+    }
+  }
+
+  /**
+   * @description Negative path for the SOAP and Bulk API helpers: each returns
+   *              false when the current quiddity belongs to a different channel.
+   */
+  @isTest
+  static void testSoapAndBulkApiHelpersRejectOtherQuiddities() {
+    System.runAs(TestFactory.getCreatedTestUser()) {
+      Test.startTest();
+
+      QuiddityGuard.testQuiddityOverride = Quiddity.REST;
+      Assert.isFalse(
+        QuiddityGuard.isSoapQuiddity(),
+        'Expected isSoapQuiddity to return false for the REST quiddity'
+      );
+      Assert.isFalse(
+        QuiddityGuard.isBulkAPIQuiddity(),
+        'Expected isBulkAPIQuiddity to return false for the REST quiddity'
+      );
+
+      QuiddityGuard.testQuiddityOverride = Quiddity.SYNCHRONOUS;
+      Assert.isFalse(
+        QuiddityGuard.isSoapQuiddity(),
+        'Expected isSoapQuiddity to return false for the SYNCHRONOUS quiddity'
+      );
+      Assert.isFalse(
+        QuiddityGuard.isBulkAPIQuiddity(),
+        'Expected isBulkAPIQuiddity to return false for the SYNCHRONOUS quiddity'
       );
 
       Test.stopTest();

@@ -7,6 +7,7 @@
  * @author David Wood
  * @since June 2024
  * @last May 2026 — conformance refactor
+ * @last August 2026 — DML-free fixtures via fake Ids; negative path for an unknown field key
  */
 @isTest
 public without sharing class UtilitiesHelperTest {
@@ -15,8 +16,8 @@ public without sharing class UtilitiesHelperTest {
     TestFactory.createMinAccessUser(true);
   }
 
-  @isTest
-  static void testCreateDynamicIdMap() {
+  private static List<Account> buildAccounts() {
+    // Pure in-memory fixtures — fake Ids, no DML.
     List<Account> accounts = new List<Account>();
     accounts.add(
       (Account) TestFactory.createSObject(
@@ -30,7 +31,13 @@ public without sharing class UtilitiesHelperTest {
         false
       )
     );
-    insert accounts;
+    Utilities.createFakeIdsForList(accounts);
+    return accounts;
+  }
+
+  @isTest
+  static void testCreateDynamicIdMap() {
+    List<Account> accounts = buildAccounts();
 
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
@@ -55,20 +62,7 @@ public without sharing class UtilitiesHelperTest {
 
   @isTest
   static void testCreateDynamicStringMap() {
-    List<Account> accounts = new List<Account>();
-    accounts.add(
-      (Account) TestFactory.createSObject(
-        new Account(Name = 'Acme', BillingStreet = '123 Main St'),
-        false
-      )
-    );
-    accounts.add(
-      (Account) TestFactory.createSObject(
-        new Account(Name = 'Globex', BillingStreet = '456 Oak Rd'),
-        false
-      )
-    );
-    insert accounts;
+    List<Account> accounts = buildAccounts();
 
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
@@ -93,11 +87,12 @@ public without sharing class UtilitiesHelperTest {
 
   @isTest
   static void testCreateDynamicIdListMap() {
+    // Three contacts sharing one fake parent Id — no DML.
+    Id fakeAccountId = TestFactory.getFakeId(Account.SObjectType);
     List<Contact> contacts = (List<Contact>) TestFactory.createSObjectList(
-      new Contact(),
+      new Contact(AccountId = fakeAccountId),
       3,
-      'TestFactoryDefaults.ContactWithAccountDefaults',
-      true
+      false
     );
 
     Test.startTest();
@@ -110,9 +105,32 @@ public without sharing class UtilitiesHelperTest {
       Assert.areEqual(1, contactMap.size(), 'There should be 1 account Id key');
       Assert.areEqual(
         3,
-        contactMap.get(contacts[0].AccountId).size(),
+        contactMap.get(fakeAccountId).size(),
         'There should be 3 contacts for the first account'
       );
+    }
+    Test.stopTest();
+  }
+
+  @isTest
+  static void testCreateDynamicIdMapBadFieldKey() {
+    List<Account> accounts = buildAccounts();
+
+    Test.startTest();
+    System.runAs(TestFactory.getMinAccessUser()) {
+      try {
+        UtilitiesHelper.createDynamicIdMap(
+          'Account',
+          'No_Such_Field__c',
+          accounts
+        );
+        Assert.fail('Expected an SObjectException for an unknown field key.');
+      } catch (SObjectException e) {
+        Assert.isTrue(
+          String.isNotBlank(e.getMessage()),
+          'The SObjectException should carry the platform message naming the bad field.'
+        );
+      }
     }
     Test.stopTest();
   }

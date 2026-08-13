@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Do_Not_Delete__c</fullName>
+    <label>Do Not Delete</label>
+    <type>Checkbox</type>
+    <defaultValue>false</defaultValue>
+    <description>Retention framework opt-out contract field: when checked, LogCleanupBatch never purges this row regardless of age. Every object configured in Log_Clean_Up__mdt must carry this checkbox.</description>
+</CustomField>

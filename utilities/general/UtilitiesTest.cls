@@ -7,6 +7,8 @@
  * @author David Wood
  * @since June 2024
  * @last May 2026 — conformance refactor
+ * @last August 2026 — DML-free map-builder fixtures; describe-derived record-type expectations;
+ *                     direct coverage for list/type helpers; shape asserts over type asserts
  */
 @isTest
 public without sharing class UtilitiesTest {
@@ -23,26 +25,17 @@ public without sharing class UtilitiesTest {
   static void testStandardPricebookId() {
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
-      // Test the standardPricebookId method
-      Id pricebookId = Utilities.standardPricebookId;
-      // Assert that the pricebookId is not null
-      Assert.isNotNull(pricebookId, 'Standard Pricebook Id should not be null');
-    }
-    Test.stopTest();
-  }
+      // Inject a known Id through PricebookUtil's @TestVisible seam so the
+      // delegation is verified without depending on org data.
+      Id injectedId = Test.getStandardPricebookId();
+      PricebookUtil.testStandardPricebookId = injectedId;
 
-  @isTest
-  static void testGetRecordTypeMap() {
-    Test.startTest();
-    System.runAs(TestFactory.getMinAccessUser()) {
-      // Get the record types for Account
-      Map<String, Schema.RecordTypeInfo> mapRecordTypesById = Utilities.getRecordTypeMap(
-        'Account'
-      );
-      // Assert that the map is not null
-      Assert.isNotNull(
-        mapRecordTypesById,
-        'Record types for Account should not be null'
+      Id pricebookId = Utilities.standardPricebookId;
+
+      Assert.areEqual(
+        injectedId,
+        pricebookId,
+        'Utilities.standardPricebookId should delegate to PricebookUtil and return the injected Id.'
       );
     }
     Test.stopTest();
@@ -91,6 +84,7 @@ public without sharing class UtilitiesTest {
 
   @isTest
   static void testCreateIdMapFromCollectionByKey() {
+    // Pure in-memory map building — fake Ids, no DML.
     List<Account> accounts = new List<Account>();
     accounts.add(
       (Account) TestFactory.createSObject(
@@ -104,7 +98,7 @@ public without sharing class UtilitiesTest {
         false
       )
     );
-    insert accounts;
+    Utilities.createFakeIdsForList(accounts);
 
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
@@ -138,6 +132,7 @@ public without sharing class UtilitiesTest {
 
   @isTest
   static void testCreateStringMapFromCollectionByKey() {
+    // Pure in-memory map building — no DML needed for a String-keyed map.
     List<Account> accounts = new List<Account>();
     accounts.add(
       (Account) TestFactory.createSObject(
@@ -151,7 +146,6 @@ public without sharing class UtilitiesTest {
         false
       )
     );
-    insert accounts;
 
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
@@ -184,11 +178,12 @@ public without sharing class UtilitiesTest {
 
   @isTest
   static void testCreateMapFromCollectionWithCollectionValues() {
+    // Pure in-memory map building — three contacts sharing one fake parent Id, no DML.
+    Id fakeAccountId = TestFactory.getFakeId(Account.SObjectType);
     List<Contact> contacts = (List<Contact>) TestFactory.createSObjectList(
-      new Contact(),
+      new Contact(AccountId = fakeAccountId),
       3,
-      'TestFactoryDefaults.ContactWithAccountDefaults',
-      true
+      false
     );
 
     Test.startTest();
@@ -200,7 +195,7 @@ public without sharing class UtilitiesTest {
       Assert.areEqual(1, contactMap.size(), 'There should be 1 account Id key');
       Assert.areEqual(
         3,
-        contactMap.get(contacts[0].AccountId).size(),
+        contactMap.get(fakeAccountId).size(),
         'There should be 3 contacts for the first account'
       );
     }
@@ -211,20 +206,20 @@ public without sharing class UtilitiesTest {
   static void testGenerateRandomCounter() {
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
-      String counter1 = Utilities.generateRandomCounter();
-      String counter2 = Utilities.generateRandomCounter();
+      String counter = Utilities.generateRandomCounter();
 
-      Assert.isInstanceOfType(
-        counter1,
-        String.class,
-        'Expected a string return'
+      // Counter contract: the first four hex characters of a generated UUID.
+      Assert.areEqual(
+        4,
+        counter.length(),
+        'The counter should be exactly 4 characters long.'
       );
-      Assert.isInstanceOfType(
-        counter2,
-        String.class,
-        'Expected a string return'
+      Assert.isTrue(
+        Pattern.matches('[0-9a-f]{4}', counter),
+        'The counter should be 4 lowercase hex characters; got "' +
+          counter +
+          '".'
       );
-      Assert.areNotEqual(counter1, counter2, 'The values should not be equal');
     }
     Test.stopTest();
   }
@@ -236,8 +231,14 @@ public without sharing class UtilitiesTest {
       String uuid1 = Utilities.generateUUID();
       String uuid2 = Utilities.generateUUID();
 
-      Assert.isInstanceOfType(uuid1, String.class, 'Expected a string return');
-      Assert.isInstanceOfType(uuid2, String.class, 'Expected a string return');
+      // UUID contract: 8-4-4-4-12 lowercase hex groups.
+      Assert.isTrue(
+        Pattern.matches(
+          '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+          uuid1
+        ),
+        'The UUID should match the 8-4-4-4-12 hex shape; got "' + uuid1 + '".'
+      );
       Assert.areNotEqual(uuid1, uuid2, 'The values should not be equal');
     }
     Test.stopTest();
@@ -341,15 +342,36 @@ public without sharing class UtilitiesTest {
 
   @isTest
   static void testGetRecordTypeIdValid() {
+    // Derive an existing Account record type from the describe so the test
+    // travels between orgs instead of assuming a specific developer name.
+    Map<String, Schema.RecordTypeInfo> infosByDeveloperName = Account.SObjectType.getDescribe()
+      .getRecordTypeInfosByDeveloperName();
+    String existingDeveloperName = null;
+    for (String developerName : infosByDeveloperName.keySet()) {
+      existingDeveloperName = developerName;
+      if (!infosByDeveloperName.get(developerName).isMaster()) {
+        break; // Prefer a non-master record type when the org has one.
+      }
+    }
+    if (existingDeveloperName == null) {
+      return; // No record type information at all — nothing to assert in this org.
+    }
+
     Id recordTypeId;
     Test.startTest();
     System.runAs(TestFactory.getMinAccessUser()) {
-      recordTypeId = Utilities.getRecordTypeId('Account', 'Prospect_Account');
+      recordTypeId = Utilities.getRecordTypeId(
+        'Account',
+        existingDeveloperName
+      );
     }
     Test.stopTest();
-    Assert.isNotNull(
+    Assert.areEqual(
+      infosByDeveloperName.get(existingDeveloperName).getRecordTypeId(),
       recordTypeId,
-      'The RecordTypeId should not be null for valid inputs'
+      'The RecordTypeId should match the describe entry for "' +
+        existingDeveloperName +
+        '".'
     );
   }
 
@@ -371,19 +393,115 @@ public without sharing class UtilitiesTest {
   }
 
   @isTest
-  private static void getFakeIdProductItemTest() {
+  private static void testGetFakeId() {
     System.runAs(TestFactory.getMinAccessUser()) {
-      Schema.SObjectType sot = Account.SObjectType;
-
       Test.startTest();
-      Id actualResult = Utilities.getFakeId(sot);
+      Id firstId = Utilities.getFakeId(Account.SObjectType);
+      Id secondId = Utilities.getFakeId(Account.SObjectType);
       Test.stopTest();
 
       Assert.areEqual(
         Account.SObjectType,
-        actualResult.getSobjectType(),
-        'getFakeIdProductItemTest'
+        firstId.getSobjectType(),
+        'The fake Id should carry the requested SObject type\'s key prefix.'
       );
+      Assert.areNotEqual(
+        firstId,
+        secondId,
+        'Successive fake Ids should differ — the counter must advance per call.'
+      );
+    }
+  }
+
+  @isTest
+  static void testExtractSObjectTypeFromList() {
+    System.runAs(TestFactory.getMinAccessUser()) {
+      List<Account> accounts = new List<Account>{ new Account(Name = 'Acme') };
+
+      Test.startTest();
+      String populatedResult = Utilities.extractSObjectTypeFromList(accounts);
+      String emptyResult = Utilities.extractSObjectTypeFromList(
+        new List<SObject>()
+      );
+      Test.stopTest();
+
+      Assert.areEqual(
+        'Account',
+        populatedResult,
+        'A populated list should report its member SObject type.'
+      );
+      Assert.areEqual(
+        'SObject',
+        emptyResult,
+        'An empty list should fall back to the generic "SObject" type name.'
+      );
+    }
+  }
+
+  @isTest
+  static void testIsNullOrEmpty() {
+    System.runAs(TestFactory.getMinAccessUser()) {
+      Test.startTest();
+      Boolean nullResult = Utilities.isNullOrEmpty(null);
+      Boolean emptyResult = Utilities.isNullOrEmpty(new List<Account>());
+      Boolean populatedResult = Utilities.isNullOrEmpty(
+        new List<Account>{ new Account(Name = 'Acme') }
+      );
+      Test.stopTest();
+
+      Assert.isTrue(nullResult, 'A null list should report null-or-empty.');
+      Assert.isTrue(emptyResult, 'An empty list should report null-or-empty.');
+      Assert.isFalse(
+        populatedResult,
+        'A populated list should not report null-or-empty.'
+      );
+    }
+  }
+
+  @isTest
+  static void testCreateFakeIdsForList() {
+    System.runAs(TestFactory.getMinAccessUser()) {
+      List<Account> accounts = new List<Account>{
+        new Account(Name = 'Acme'),
+        new Account(Name = 'Globex')
+      };
+
+      Test.startTest();
+      List<SObject> result = Utilities.createFakeIdsForList(accounts);
+      Test.stopTest();
+
+      Assert.areEqual(
+        2,
+        result.size(),
+        'The same two records should come back.'
+      );
+      Assert.isNotNull(accounts[0].Id, 'Each record should receive a fake Id.');
+      Assert.isNotNull(accounts[1].Id, 'Each record should receive a fake Id.');
+      Assert.areNotEqual(
+        accounts[0].Id,
+        accounts[1].Id,
+        'Each record should receive a distinct fake Id.'
+      );
+      Assert.areEqual(
+        Account.SObjectType,
+        accounts[0].Id.getSobjectType(),
+        'Fake Ids should carry the record\'s own SObject type.'
+      );
+    }
+  }
+
+  @isTest
+  static void testCreateFakeIdsForListNullList() {
+    System.runAs(TestFactory.getMinAccessUser()) {
+      try {
+        Utilities.createFakeIdsForList(null);
+        Assert.fail('Expected a NullPointerException for a null list.');
+      } catch (NullPointerException e) {
+        Assert.isTrue(
+          String.isNotBlank(e.getMessage()),
+          'The NullPointerException should carry the platform message.'
+        );
+      }
     }
   }
 

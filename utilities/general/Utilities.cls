@@ -4,6 +4,7 @@
  * @author David Wood
  * @since June 2024
  * @last May 2026 — conformance refactor
+ * @last August 2026 — removed duplicate record-type helpers and dead null handling
  * @group Utilities
  */
 public inherited sharing class Utilities {
@@ -16,31 +17,6 @@ public inherited sharing class Utilities {
     get {
       return PricebookUtil.standardPricebookId;
     }
-  }
-
-  /**
-   * @description Returns a map of all the record types for a given sObject.
-   * @param sObjectName The name of the sObject.
-   * @return A map of all the record types for the given sObject.
-   */
-  public static Map<String, Schema.RecordTypeInfo> getRecordTypeMap(
-    String sObjectName
-  ) {
-    Schema.DescribeSObjectResult describeResult = Schema.getGlobalDescribe()
-      .get(sObjectName)
-      .getDescribe();
-    return describeResult.getRecordTypeInfosByName();
-  }
-
-  /**
-   * @description Retrieves record type information for a given sObject. Delegates to getRecordTypeMap.
-   * @param sObjectName The API name of the sObject for which to retrieve record type information.
-   * @return A map of record type API names to their corresponding Schema.RecordTypeInfo objects.
-   */
-  public static Map<String, Schema.RecordTypeInfo> getRecordTypes(
-    String sObjectName
-  ) {
-    return getRecordTypeMap(sObjectName);
   }
 
   /**
@@ -155,7 +131,7 @@ public inherited sharing class Utilities {
    * @return A randomly generated counter value as a string.
    */
   public static String generateRandomCounter() {
-    return String.valueOf(generateUUID().substring(0, 4));
+    return generateUUID().substring(0, 4);
   }
 
   /**
@@ -218,7 +194,6 @@ public inherited sharing class Utilities {
         idSet.add(value);
       }
     }
-    idSet.remove(null);
     return idSet;
   }
 

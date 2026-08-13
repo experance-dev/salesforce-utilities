@@ -23,18 +23,19 @@ public inherited sharing class OrderDiscountService {
 
 ## 2 Change-log discipline in the header
 
-### 2.1 `@last` records one line per feature, not one line per commit
+### 2.1 `@last` records at most one entry per day — one line preferred, two at the outside
 
-The `@last` entry is the audit trail of what the class does *now*, not a mirror of the git log. Every time a feature ships that meaningfully changes the class's behavior or contract, append one line: date plus a short description of what shipped. Routine refactors, formatting passes, and lint fixes don't get a line — commit messages are the per-modification record; `@last` is the per-feature one.
+The `@last` entry is the audit trail of what the class does *now*, not a mirror of the git log. The granularity rule: **one entry per calendar day, no matter how many changes landed that day.** A day's work — even several distinct fixes — collapses into a single entry: date plus a short description of what shipped. Keep it to one line; when a day genuinely carried two unrelated feature-level changes, the entry may stretch to two lines, never more. Routine refactors, formatting passes, and lint fixes don't earn an entry at all — commit messages are the per-modification record; `@last` is the header's summary.
 
 ```apex
 /**
  * @last June 2026 — initial ship
- * @last August 2026 — added tiered discount stacking for bundled orders
+ * @last August 2026 — tiered discount stacking for bundled orders;
+ *                     order-total rounding moved to currency scale
  */
 ```
 
-[`DMLManager.cls`](../utilities/dml/DMLManager.cls) is a real example of the discipline: its `@last` line reads `May 2026 — USER_MODE migration; DMLManagerException now extends UtilitiesModuleException` — one line naming the feature-level change, not a list of every commit that touched the file.
+If two entries carry the same date, they were written wrong — merge them on the next touch. [`DMLManager.cls`](../utilities/dml/DMLManager.cls) is a real example of the discipline: its `@last` line reads `May 2026 — USER_MODE migration; DMLManagerException now extends UtilitiesModuleException` — one line summarizing the day's change, not a list of every commit that touched the file.
 
 Letting `@last` grow into a full change history defeats its purpose: a reader scanning the header wants "what does this class do and when did that last change," not a duplicate of `git log --follow`. If you find yourself appending an entry for every PR, the class is overdue for a squash of its own header.
 

@@ -32,6 +32,7 @@
  * @author  PatronManager LLC, David Wood
  * @since   May 2024
  * @last    May 2026 — conformance refactor
+ * @last    August 2026 — admin-context setup DML, OWD-independent share fixture, TestFactory fixtures, DMLManagerInert injection
  */
 @isTest
 private without sharing class DMLManagerTest {
@@ -54,17 +55,35 @@ private without sharing class DMLManagerTest {
       accountShare.UserOrGroupId = restrictedUser.Id;
       accountShare.AccountAccessLevel = 'Edit';
       accountShare.OpportunityAccessLevel = 'Edit';
-      insert accountShare;
+      // OWD-independent share fixture: when the org's Account OWD is already Public
+      // Read/Write, the platform rejects a manual share that grants nothing beyond the
+      // default with INVALID_ACCESS_LEVEL. Partial-success insert lets that outcome pass
+      // as "already granted by OWD"; any other failure is a genuine fixture problem.
+      for (
+        Database.SaveResult shareResult : Database.insert(
+          new List<AccountShare>{ accountShare },
+          false
+        )
+      ) {
+        if (!shareResult.isSuccess()) {
+          for (Database.Error shareError : shareResult.getErrors()) {
+            Assert.areEqual(
+              StatusCode.INVALID_ACCESS_LEVEL,
+              shareError.getStatusCode(),
+              'AccountShare fixture insert failed for a reason other than the OWD already granting access'
+            );
+          }
+        }
+      }
     }
 
   }
 
   @isTest
   static void systemInsert() {
-    Opportunity o1 = new Opportunity(
-      Name = 'Original1 Opp',
-      StageName = 'Won',
-      CloseDate = Date.today()
+    Opportunity o1 = (Opportunity) TestFactory.createSObject(
+      new Opportunity(Name = 'Original1 Opp'),
+      false
     );
 
     User restrictedUser = getRestrictedUser();
@@ -250,12 +269,7 @@ private without sharing class DMLManagerTest {
     }
 
     Opportunity o1 = (Opportunity) TestFactory.createSObject(
-      new Opportunity(
-        Name = 'Original1 Opp',
-        CampaignId = c1.Id,
-        StageName = 'Won',
-        CloseDate = Date.today()
-      ),
+      new Opportunity(Name = 'Original1 Opp', CampaignId = c1.Id),
       false
     );
 
@@ -294,66 +308,64 @@ private without sharing class DMLManagerTest {
 
   @isTest
   static void flsUnrestrictedUpsert() {
-    Campaign c1 = (Campaign) TestFactory.createSObject(
-      new Campaign(Name = 'Test Campaign 1'),
-      false
-    );
-    Campaign c2 = (Campaign) TestFactory.createSObject(
-      new Campaign(Name = 'Test Campaign 2'),
-      false
-    );
-    System.runAs(new User(Id = UserInfo.getUserId())) {
+    // Runs as an explicitly-permissioned admin: the unrestricted path is a deliberate
+    // grant, not an accident of whichever user happens to execute the test run.
+    System.runAs(getAdminUser()) {
+      Campaign c1 = (Campaign) TestFactory.createSObject(
+        new Campaign(Name = 'Test Campaign 1'),
+        false
+      );
+      Campaign c2 = (Campaign) TestFactory.createSObject(
+        new Campaign(Name = 'Test Campaign 2'),
+        false
+      );
       insert new List<Campaign>{ c1, c2 };
+
+      Opportunity o1 = (Opportunity) TestFactory.createSObject(
+        new Opportunity(Name = 'Original1 Opp', CampaignId = c1.Id),
+        false
+      );
+      DMLManager.upsertAsUser(new List<Opportunity>{ o1 });
+      Assert.isNotNull(o1.Id, 'Opportunity should have been inserted');
+
+      o1.Name = 'Updated1 Opp';
+      o1.CampaignId = c2.Id;
+
+      Opportunity o2 = (Opportunity) TestFactory.createSObject(
+        new Opportunity(Name = 'Test2 Opp', CampaignId = c2.Id),
+        false
+      );
+
+      DMLManager.upsertAsUser(new List<Opportunity>{ o1, o2 });
+
+      List<Opportunity> reload = [
+        SELECT Id, Name, CampaignId
+        FROM Opportunity
+        ORDER BY Id
+      ];
+      Assert.areEqual(2, reload.size(), 'There should be two Opportunities');
+      Assert.areEqual(
+        'Updated1 Opp',
+        reload[0].Name,
+        'The first Opportunity name should be Updated1 Opp'
+      );
+      Assert.areEqual(
+        c2.Id,
+        reload[0].CampaignId,
+        'The first Opportunity CampaignId should be c2.Id'
+      );
+      Assert.areEqual(
+        'Test2 Opp',
+        reload[1].Name,
+        'The second Opportunity name should be Test2 Opp'
+      );
+      Assert.areEqual(
+        c2.Id,
+        reload[1].CampaignId,
+        'The second Opportunity CampaignId should be c2.Id'
+      );
+      Assert.isNotNull(reload[1].Id, 'The second Opportunity should have an Id');
     }
-
-    Opportunity o1 = new Opportunity(
-      Name = 'Original1 Opp',
-      CampaignId = c1.Id,
-      StageName = 'Won',
-      CloseDate = Date.today()
-    );
-    DMLManager.upsertAsUser(new List<Opportunity>{ o1 });
-    Assert.isNotNull(o1.Id, 'Opportunity should have been inserted');
-
-    o1.Name = 'Updated1 Opp';
-    o1.CampaignId = c2.Id;
-
-    Opportunity o2 = new Opportunity(
-      Name = 'Test2 Opp',
-      CampaignId = c2.Id,
-      StageName = 'Won',
-      CloseDate = Date.today()
-    );
-
-    DMLManager.upsertAsUser(new List<Opportunity>{ o1, o2 });
-
-    List<Opportunity> reload = [
-      SELECT Id, Name, CampaignId
-      FROM Opportunity
-      ORDER BY Id
-    ];
-    Assert.areEqual(2, reload.size(), 'There should be two Opportunities');
-    Assert.areEqual(
-      'Updated1 Opp',
-      reload[0].Name,
-      'The first Opportunity name should be Updated1 Opp'
-    );
-    Assert.areEqual(
-      c2.Id,
-      reload[0].CampaignId,
-      'The first Opportunity CampaignId should be c2.Id'
-    );
-    Assert.areEqual(
-      'Test2 Opp',
-      reload[1].Name,
-      'The second Opportunity name should be Test2 Opp'
-    );
-    Assert.areEqual(
-      c2.Id,
-      reload[1].CampaignId,
-      'The second Opportunity CampaignId should be c2.Id'
-    );
-    Assert.isNotNull(reload[1].Id, 'The second Opportunity should have an Id');
   }
 
   @isTest
@@ -371,9 +383,7 @@ private without sharing class DMLManagerTest {
       new Opportunity(
         Name = 'Original1 Opp',
         AccountId = getAppleAccount().Id,
-        CampaignId = c1.Id,
-        StageName = 'Won',
-        CloseDate = Date.today()
+        CampaignId = c1.Id
       ),
       false
     );
@@ -387,11 +397,9 @@ private without sharing class DMLManagerTest {
     o1.Name = 'Updated1 Opp';
     o1.CampaignId = c2.Id;
 
-    Opportunity o2 = new Opportunity(
-      Name = 'Test2 Opp',
-      CampaignId = c2.Id,
-      StageName = 'Won',
-      CloseDate = Date.today()
+    Opportunity o2 = (Opportunity) TestFactory.createSObject(
+      new Opportunity(Name = 'Test2 Opp', CampaignId = c2.Id),
+      false
     );
 
     User restrictedUser = getRestrictedUser();
@@ -435,12 +443,13 @@ private without sharing class DMLManagerTest {
       new Campaign(Name = 'Test2 Campaign'),
       false
     );
-    Opportunity o1 = new Opportunity(
-      Name = 'Original1 Opp',
-      AccountId = getAppleAccount().Id,
-      CampaignId = c1.Id,
-      StageName = 'Won',
-      CloseDate = Date.today()
+    Opportunity o1 = (Opportunity) TestFactory.createSObject(
+      new Opportunity(
+        Name = 'Original1 Opp',
+        AccountId = getAppleAccount().Id,
+        CampaignId = c1.Id
+      ),
+      false
     );
 
     System.runAs(new User(Id = UserInfo.getUserId())) {
@@ -479,7 +488,7 @@ private without sharing class DMLManagerTest {
         Assert.areEqual(
           Opportunity.SObjectType.fields.CampaignId,
           flse.field,
-          'The field should be a CampaingId'
+          'The field should be CampaignId'
         );
       }
     }
@@ -487,35 +496,39 @@ private without sharing class DMLManagerTest {
 
   @isTest
   static void crudUnrestrictedInsertUpdateDelete() {
-    Campaign c1 = (Campaign) TestFactory.createSObject(
-      new Campaign(Name = 'Test1 Campaign'),
-      false
-    );
-    DMLManager.insertAsUser(c1);
+    // Runs as an explicitly-permissioned admin: the unrestricted path is a deliberate
+    // grant, not an accident of whichever user happens to execute the test run.
+    System.runAs(getAdminUser()) {
+      Campaign c1 = (Campaign) TestFactory.createSObject(
+        new Campaign(Name = 'Test1 Campaign'),
+        false
+      );
+      DMLManager.insertAsUser(c1);
 
-    //Would blow up if the Campaign wasn't inserted (List has no rows for assignment)
-    Campaign c1Reload = [
-      SELECT Id, Name, StartDate
-      FROM Campaign
-      WHERE Id = :c1.Id
-    ];
-    Assert.isNull(c1Reload.StartDate, 'Start Date should be null');
+      //Would blow up if the Campaign wasn't inserted (List has no rows for assignment)
+      Campaign c1Reload = [
+        SELECT Id, Name, StartDate
+        FROM Campaign
+        WHERE Id = :c1.Id
+      ];
+      Assert.isNull(c1Reload.StartDate, 'Start Date should be null');
 
-    c1Reload.StartDate = Date.today();
+      c1Reload.StartDate = Date.today();
 
-    DMLManager.updateAsUser(c1Reload);
+      DMLManager.updateAsUser(c1Reload);
 
-    c1Reload = [SELECT Id, Name, StartDate FROM Campaign WHERE Id = :c1.Id];
-    Assert.areEqual(
-      Date.today(),
-      c1Reload.StartDate,
-      'Start Date should be today'
-    );
+      c1Reload = [SELECT Id, Name, StartDate FROM Campaign WHERE Id = :c1.Id];
+      Assert.areEqual(
+        Date.today(),
+        c1Reload.StartDate,
+        'Start Date should be today'
+      );
 
-    DMLManager.deleteAsUser(c1Reload);
+      DMLManager.deleteAsUser(c1Reload);
 
-    List<Campaign> reloaded = [SELECT Id, Name FROM Campaign];
-    Assert.areEqual(0, reloaded.size(), 'There should be no Campaigns');
+      List<Campaign> reloaded = [SELECT Id, Name FROM Campaign];
+      Assert.areEqual(0, reloaded.size(), 'There should be no Campaigns');
+    }
   }
 
   @isTest
@@ -683,7 +696,7 @@ private without sharing class DMLManagerTest {
         FROM Account
         WHERE Name LIKE 'Merge%'
       ];
-      Assert.areEqual(2, mergeList.size(), 'There shoudl be 2 items');
+      Assert.areEqual(2, mergeList.size(), 'There should be 2 items');
 
       try {
         DMLManager.mergeAsUser(masterAcct, mergeList);
@@ -770,98 +783,82 @@ private without sharing class DMLManagerTest {
 
     // 'Master Account' and merge accounts should still be there.
     accList = [SELECT Id FROM Account WHERE Name != :APPLE_ACCOUNT];
-    Assert.areEqual(3, accList.size(), 'Account size shouild be 3');
+    Assert.areEqual(3, accList.size(), 'Account size should be 3');
   }
 
   @isTest
   static void testFailedUpdateWithErroneousId() {
-    Campaign c1 = (Campaign) TestFactory.createSObject(
-      new Campaign(Name = 'Test Campaign 1'),
-      true
-    );
-    Id cId = null;
-    cId = c1.Id;
-    delete c1;
+    // Runs as an explicitly-permissioned admin: the negative path under test is the
+    // erroneous Id, not the running user's permissions.
+    System.runAs(getAdminUser()) {
+      Campaign c1 = (Campaign) TestFactory.createSObject(
+        new Campaign(Name = 'Test Campaign 1'),
+        true
+      );
+      Id cId = null;
+      cId = c1.Id;
+      delete c1;
 
-    try {
-      Campaign c1Resurrected = new Campaign(
-        Id = cId,
-        Name = 'Resurrected Campaign'
-      );
-      DMLManager.upsertAsUser(c1Resurrected);
-      Assert.fail(
-        'Expected a DMLManagerException! Attempting to update a record with an erroneous Id should fail'
-      );
-    } catch (DMLManager.DMLManagerException dmle) {
-      //expected
-      Assert.isTrue(
-        dmle.getMessage().contains('An existing record could not be found'),
-        'Record should not be found'
-      );
+      try {
+        Campaign c1Resurrected = new Campaign(
+          Id = cId,
+          Name = 'Resurrected Campaign'
+        );
+        DMLManager.upsertAsUser(c1Resurrected);
+        Assert.fail(
+          'Expected a DMLManagerException! Attempting to update a record with an erroneous Id should fail'
+        );
+      } catch (DMLManager.DMLManagerException dmle) {
+        //expected
+        Assert.isTrue(
+          dmle.getMessage().contains('An existing record could not be found'),
+          'Record should not be found'
+        );
+      }
     }
   }
 
   @IsTest
   static void dmlOperationWhenCustomInertDMLOperationsAreSpecifiedExpectNoChangesWithinServer() {
-    Contact ctc = new Contact();
-    ctc.FirstName = 'Jeremiah';
-    ctc.LastName = 'Matthews';
-    String expectedLastName = ctc.LastName;
+    // Runs as an explicitly-permissioned admin: the behaviour under test is implementation
+    // injection, not the running user's permissions.
+    System.runAs(getAdminUser()) {
+      Contact ctc = (Contact) TestFactory.createSObject(
+        new Contact(FirstName = 'Jeremiah', LastName = 'Matthews'),
+        false
+      );
+      String expectedLastName = ctc.LastName;
 
-    // ------ First let's clearly assert the default DML operation is working ------
-    DMLManager.insertAsUser(ctc);
+      // ------ First let's clearly assert the default DML operation is working ------
+      DMLManager.insertAsUser(ctc);
 
-    List<Contact> actualContactList = [
-      SELECT Id
-      FROM Contact
-      WHERE FirstName = :ctc.FirstName AND LastName = :ctc.LastName
-    ];
-    Assert.areEqual(
-      1,
-      actualContactList.size(),
-      'The Salesforce database should contain the new Contact.'
-    );
+      List<Contact> actualContactList = [
+        SELECT Id
+        FROM Contact
+        WHERE FirstName = :ctc.FirstName AND LastName = :ctc.LastName
+      ];
+      Assert.areEqual(
+        1,
+        actualContactList.size(),
+        'The Salesforce database should contain the new Contact.'
+      );
 
-    // ------ Now let's test the DML Operation injection ------
-    ctc.LastName = 'Long';
+      // ------ Now let's test the DML Operation injection ------
+      ctc.LastName = 'Long';
 
-    // Injecting the inert DML class
-    DMLManager.setDMLImplementation(new InertDML());
+      // Injecting the shipped inert DML implementation
+      DMLManager.setDMLImplementation(new DMLManagerInert());
 
-    DMLManager.updateAsUser(ctc);
+      DMLManager.updateAsUser(ctc);
 
-    // Since the InertDML does nothing, the DMLManager operation respectively does nothing,
-    // therefore the Contact is NOT saved within Salesforce.
-    actualContactList = [SELECT LastName FROM Contact WHERE Id = :ctc.Id];
-    Assert.areEqual(
-      expectedLastName,
-      actualContactList.get(0).LastName,
-      'The Contact should retain the original data.'
-    );
-  }
-
-  private class InertDML extends DMLManager.SimpleDML {
-    public override void dmlDelete(List<SObject> recordsToDelete) {
-      return;
-    }
-
-    public override void dmlInsert(List<SObject> recordsToInsert) {
-      return;
-    }
-
-    public override void dmlMerge(
-      sObject masterRecord,
-      List<SObject> duplicateRecords
-    ) {
-      return;
-    }
-
-    public override void dmlUpdate(List<SObject> recordsToUpdate) {
-      return;
-    }
-
-    public override void dmlUpsert(List<SObject> recordsToUpsert) {
-      return;
+      // Since DMLManagerInert does nothing, the DMLManager operation respectively does
+      // nothing, therefore the Contact is NOT saved within Salesforce.
+      actualContactList = [SELECT LastName FROM Contact WHERE Id = :ctc.Id];
+      Assert.areEqual(
+        expectedLastName,
+        actualContactList.get(0).LastName,
+        'The Contact should retain the original data.'
+      );
     }
   }
 
@@ -884,28 +881,32 @@ private without sharing class DMLManagerTest {
     Boolean edit,
     Boolean remove
   ) {
-    PermissionSet ps = new PermissionSet(
-      Name = 'Enable' + objectType,
-      Label = 'Enable ' + objectType
-    );
-    insert ps;
+    // Setup-object DML runs under an explicit admin context; see
+    // standards/testing-discipline.md, "Test infrastructure".
+    System.runAs(getAdminUser()) {
+      PermissionSet ps = new PermissionSet(
+        Name = 'Enable' + objectType,
+        Label = 'Enable ' + objectType
+      );
+      insert ps;
 
-    ObjectPermissions oPerm = new ObjectPermissions(
-      ParentId = ps.Id,
-      PermissionsRead = true,
-      PermissionsCreate = create,
-      PermissionsEdit = edit,
-      PermissionsDelete = remove,
-      SObjectType = objectType
-    );
+      ObjectPermissions oPerm = new ObjectPermissions(
+        ParentId = ps.Id,
+        PermissionsRead = true,
+        PermissionsCreate = create,
+        PermissionsEdit = edit,
+        PermissionsDelete = remove,
+        SObjectType = objectType
+      );
 
-    insert oPerm;
+      insert oPerm;
 
-    PermissionSetAssignment assign = new PermissionSetAssignment(
-      AssigneeId = u.Id,
-      PermissionSetId = ps.Id
-    );
-    insert assign;
+      PermissionSetAssignment assign = new PermissionSetAssignment(
+        AssigneeId = u.Id,
+        PermissionSetId = ps.Id
+      );
+      insert assign;
+    }
   }
 
   /**
@@ -914,33 +915,38 @@ private without sharing class DMLManagerTest {
    * @return The created restricted user.
    */
   private static User createRestrictedUser() {
+    // createMinAccessUser wraps its own setup-object DML in System.runAs(admin) internally.
     User restrictedUser = TestFactory.createMinAccessUser(true);
 
-    // Create a Permission Set that grants "Read" access to Account, Contact and Opportunity
-    PermissionSet ps = new PermissionSet(
-      Label = 'Restricted User',
-      Name = 'RestrictedUser'
-    );
-    insert ps;
+    // Setup-object DML runs under an explicit admin context; see
+    // standards/testing-discipline.md, "Test infrastructure".
+    System.runAs(getAdminUser()) {
+      // Create a Permission Set that grants "Read" access to Account, Contact and Opportunity
+      PermissionSet ps = new PermissionSet(
+        Label = 'Restricted User',
+        Name = 'RestrictedUser'
+      );
+      insert ps;
 
-    List<ObjectPermissions> objectPerms = new List<ObjectPermissions>();
-    objectPerms.add(
-      createObjectPerms(ps.Id, 'Account', true, false, false, false)
-    );
-    objectPerms.add(
-      createObjectPerms(ps.Id, 'Contact', true, false, false, false)
-    );
-    objectPerms.add(
-      createObjectPerms(ps.Id, 'Opportunity', true, false, false, false)
-    );
-    insert objectPerms;
+      List<ObjectPermissions> objectPerms = new List<ObjectPermissions>();
+      objectPerms.add(
+        createObjectPerms(ps.Id, 'Account', true, false, false, false)
+      );
+      objectPerms.add(
+        createObjectPerms(ps.Id, 'Contact', true, false, false, false)
+      );
+      objectPerms.add(
+        createObjectPerms(ps.Id, 'Opportunity', true, false, false, false)
+      );
+      insert objectPerms;
 
-    // Assign this perm set to our restricted user
-    PermissionSetAssignment psa = new PermissionSetAssignment(
-      AssigneeId = restrictedUser.Id,
-      PermissionSetId = ps.Id
-    );
-    insert psa;
+      // Assign this perm set to our restricted user
+      PermissionSetAssignment psa = new PermissionSetAssignment(
+        AssigneeId = restrictedUser.Id,
+        PermissionSetId = ps.Id
+      );
+      insert psa;
+    }
 
     return restrictedUser;
   }
@@ -968,5 +974,16 @@ private without sharing class DMLManagerTest {
 
   private static User getRestrictedUser() {
     return TestFactory.getMinAccessUser();
+  }
+
+  private static User getAdminUser() {
+    // SOQL: acceptable in test context — setup-object DML must run under an explicit
+    // admin, and the unrestricted-path tests need a deliberately-permissioned runner.
+    return [
+      SELECT Id
+      FROM User
+      WHERE Profile.Name = 'System Administrator' AND IsActive = TRUE
+      LIMIT 1
+    ];
   }
 }
