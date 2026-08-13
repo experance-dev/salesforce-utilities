@@ -67,7 +67,7 @@ for (Order__c ord : orders) {
 // for whatever didn't make it in.
 ```
 
-Build the batch's valid records with [`TestFactory.cls`](../utilities/testing/TestFactory.cls) in the corresponding test — assert both the happy-path upsert and that a deliberately malformed record shows up in `errors[]` instead of aborting the batch.
+Build the batch's valid records with [`TestFactory.cls`](../../utilities/testing/TestFactory.cls) in the corresponding test — assert both the happy-path upsert and that a deliberately malformed record shows up in `errors[]` instead of aborting the batch.
 
 ## 3. Catastrophic upsert failure returns 5xx — 200 is reserved for partial validation failure
 
@@ -94,7 +94,7 @@ try {
 }
 ```
 
-See [`Logger.cls`](../utilities/logging/Logger.cls) for the exception-logging call used above, and [`DMLManager.cls`](../utilities/dml/DMLManager.cls) for the routed insert/update/upsert/delete surface this endpoint should use for every write that *isn't* the external-ID partial-upsert gap called out above. For the outbound half of an integration — calls this org makes to an external system rather than receives — see [`RestClient.cls`](../utilities/rest/RestClient.cls).
+See [`Logger.cls`](../../utilities/logging/Logger.cls) for the exception-logging call used above, and [`DMLManager.cls`](../../utilities/dml/DMLManager.cls) for the routed insert/update/upsert/delete surface this endpoint should use for every write that *isn't* the external-ID partial-upsert gap called out above. For the outbound half of an integration — calls this org makes to an external system rather than receives — see [`RestClient.cls`](../../utilities/rest/RestClient.cls).
 
 ## 4. A managed-package connector's field mapping is a regulated-data perimeter control
 

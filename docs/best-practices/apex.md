@@ -37,7 +37,7 @@ Decompose anything over budget. Prefer `Map` lookups over nested loops. Single r
 
 ## DML
 
-- All DML routes through [`DMLManager`](../utilities/dml/DMLManager.cls) using its **`xxxAsUser` methods** (`insertAsUser`, `updateAsUser`, etc.). Never bare `insert`/`update`/`delete` outside `DMLManager`.
+- All DML routes through [`DMLManager`](../../utilities/dml/DMLManager.cls) using its **`xxxAsUser` methods** (`insertAsUser`, `updateAsUser`, etc.). Never bare `insert`/`update`/`delete` outside `DMLManager`.
 
 ## Method visibility
 
@@ -45,7 +45,7 @@ Decompose anything over budget. Prefer `Map` lookups over nested loops. Single r
 
 ## Error handling
 
-- Use [`Logger`](../utilities/logging/Logger.cls) for logging — never `System.debug` in production paths.
+- Use [`Logger`](../../utilities/logging/Logger.cls) for logging — never `System.debug` in production paths.
 - Processing classes wrap in try/catch and rethrow with a custom exception that carries context. **Never concatenate `e.getMessage()` + `e.getStackTraceString()` into the rethrown message** — that's the exact anti-pattern [observability.md](../standards/observability.md) bans: internal exception detail leaking into a message a caller (or an end user, several layers up) can see. `Logger.logException` captures the full detail server-side; the rethrown message carries only a correlation ID and the exception's type name:
 
 ```apex
@@ -92,7 +92,7 @@ List<Account> accs = [SELECT Id, Name FROM Account WITH USER_MODE LIMIT 50];
 Database.insert(accs, AccessLevel.USER_MODE);
 ```
 
-`DMLManager.xxxAsUser` is verified to route through `AccessLevel.USER_MODE` internally on every path (see [`DMLManager.cls`](../utilities/dml/DMLManager.cls)) — there's nothing left to audit here.
+`DMLManager.xxxAsUser` is verified to route through `AccessLevel.USER_MODE` internally on every path (see [`DMLManager.cls`](../../utilities/dml/DMLManager.cls)) — there's nothing left to audit here.
 
 **CMDT reads — not routine SOQL.** Custom Metadata Type access goes through `Type.getInstance()` / `<Type>.getAll()`, never a SOQL query — see [architecture-layering.md](../standards/architecture-layering.md) for the full rule and why. The one sanctioned exception is narrow: a Custom Metadata field is a long-text area whose value exceeds the 255-character truncation the `getInstance()` / `getAll()` static methods impose. That's the only case where SOQL against a `__mdt` object is the right call, and when it fires, the query uses `WITH SYSTEM_MODE` with the reason documented inline — not `WITH USER_MODE`, which is policy theater here: CMDT reads bypass CRUD/FLS by platform rule, so there's no user-mode access decision to make.
 
@@ -111,7 +111,7 @@ List<Integration_Config__mdt> cfg = [
 
 - `Logger.logException(e, className, methodName)` for caught exceptions.
 - `Logger.info` / `Logger.warn` / `Logger.debug` sparingly — log decision points, not every step.
-- Schedule [`LogCleanupScheduler`](../utilities/logging/LogCleanUp/LogCleanupScheduler.cls) so log records don't accumulate.
+- Schedule [`LogCleanupScheduler`](../../utilities/logging/LogCleanUp/LogCleanupScheduler.cls) so log records don't accumulate.
 
 ### Custom labels for user-facing strings
 

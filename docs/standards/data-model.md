@@ -40,7 +40,7 @@ This file governs SObject and field design: picklist discipline, relationship ty
     Written only by the integration user (FLS-restricted); humans never edit it.</description>
 ```
 
-External-ID upsert from Apex has no manager-wrapped overload — use `Database.upsert(records, Invoice__c.Source_System_Key__c, false, AccessLevel.USER_MODE)` directly, documented inline, per the carve-out noted in [`DMLManager.cls`](../utilities/dml/DMLManager.cls) and [security-sharing.md](security-sharing.md) §3.
+External-ID upsert from Apex has no manager-wrapped overload — use `Database.upsert(records, Invoice__c.Source_System_Key__c, false, AccessLevel.USER_MODE)` directly, documented inline, per the carve-out noted in [`DMLManager.cls`](../../utilities/dml/DMLManager.cls) and [security-sharing.md](security-sharing.md) §3.
 
 ## 4. Description is mandatory on every custom object and every custom field
 
@@ -100,7 +100,7 @@ List<Account> accounts = [
 
 **Rule.** Any object projected to accumulate high volume — logs, touches, events, line items — gets an explicit retention rule and an archive destination (big object, Data Cloud, or off-platform) written down when the object is designed, not when it hurts.
 
-**Why.** Large data volumes degrade query, report, and sharing performance long before storage limits bite, and retrofitting archival onto an object that already holds tens of millions of rows is a project, not a task. The retention rule belongs in configuration, not in a comment: [`LogCleanupBatch.cls`](../utilities/logging/LogCleanUp/LogCleanupBatch.cls) is the shipped pattern — a batch whose age thresholds live in custom metadata (`Log_Clean_Up__mdt`), so the retention policy is declarative, per-object, and changeable without a deploy.
+**Why.** Large data volumes degrade query, report, and sharing performance long before storage limits bite, and retrofitting archival onto an object that already holds tens of millions of rows is a project, not a task. The retention rule belongs in configuration, not in a comment: [`LogCleanupBatch.cls`](../../utilities/logging/LogCleanUp/LogCleanupBatch.cls) is the shipped pattern — a batch whose age thresholds live in custom metadata (`Log_Clean_Up__mdt`), so the retention policy is declarative, per-object, and changeable without a deploy.
 
 "High-volume" is a design-time judgment: estimate rows/year at creation. An object growing by millions of rows a year without a retention answer is a §-violation even while it's still small.
 

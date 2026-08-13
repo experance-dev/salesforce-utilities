@@ -12,7 +12,7 @@ This file governs how an org chooses its integration mechanisms — platform eve
 | --- | --- | --- |
 | Fire-and-forget business signal, one or more independent consumers | Platform event | Durable, replayable pub/sub; the sender doesn't know or block on receivers |
 | Broadcast record-data changes with a standard payload | Change Data Capture | Platform-authored change payloads (field deltas, change headers) with no publish code to write |
-| Genuine request/response — the caller needs the answer to continue | Synchronous REST callout via [`RestClient.cls`](../utilities/rest/RestClient.cls) | An immediate answer, paid for in blocking, timeout handling, and retry design (§3) |
+| Genuine request/response — the caller needs the answer to continue | Synchronous REST callout via [`RestClient.cls`](../../utilities/rest/RestClient.cls) | An immediate answer, paid for in blocking, timeout handling, and retry design (§3) |
 | The target API has (or can be given) an OpenAPI spec | External Services registration | Generated invocable actions and typed Apex from the spec — no hand-rolled HTTP parsing to write or unit-test |
 
 **Why.** Each mechanism buys a different failure mode — replay vs. simplicity vs. blocking. A consumer being down is a non-event for a platform-event subscriber (it resumes from where it left off), a data-loss incident for a fire-and-forget callout, and a user-facing error for a blocking one. Choosing by shape makes the failure mode a decision instead of a production discovery.
@@ -34,7 +34,7 @@ Two boundary calls that come up repeatedly:
 
 **Why.** Named credentials externalize both the endpoint and the auth handshake from code: secrets never enter version control, rotation is an org-config change instead of a deployment, and per-environment endpoints stop being merge hazards. Every other storage location — a token in a custom setting, a URL constant added "temporarily" — eventually leaks into a repo, a debug log, or a metadata retrieve.
 
-[`RestClient.cls`](../utilities/rest/RestClient.cls) enforces this by construction: it takes a named credential name and builds every endpoint as `callout:` + that name. There is no constructor path that accepts a raw URL — extend it rather than hand-rolling `HttpRequest` plumbing.
+[`RestClient.cls`](../../utilities/rest/RestClient.cls) enforces this by construction: it takes a named credential name and builds every endpoint as `callout:` + that name. There is no constructor path that accepts a raw URL — extend it rather than hand-rolling `HttpRequest` plumbing.
 
 ```apex
 public with sharing class BillingApiService extends RestClient {
@@ -56,7 +56,7 @@ public with sharing class BillingApiService extends RestClient {
 
 **Why.** The default 10 seconds (maximum 120) is arbitrary relative to your transaction, and the cumulative 120-second callout budget per transaction is a shared resource: one slow upstream riding the default can consume the time three other callouts in the same transaction needed.
 
-[`RestClient.cls`](../utilities/rest/RestClient.cls) sets a 120-second default and exposes `withTimeout` for per-call budgets — override the default in any synchronous context.
+[`RestClient.cls`](../../utilities/rest/RestClient.cls) sets a 120-second default and exposes `withTimeout` for per-call budgets — override the default in any synchronous context.
 
 ### 3.2 Retry only recoverable failures, with backoff and jitter — off the synchronous path
 
@@ -80,7 +80,7 @@ public with sharing class BillingApiService extends RestClient {
 
 ### 4.1 Check the `SaveResult` from every `EventBus.publish` call
 
-**Rule.** `EventBus.publish()` returns `Database.SaveResult` (or a list of them) and does not throw on a failed publish — its behavior mirrors partial-success `Database.insert`. Every publish call checks `isSuccess()` per result and logs failures through [`Logger.cls`](../utilities/logging/Logger.cls); an unchecked publish result is a review-blocking defect.
+**Rule.** `EventBus.publish()` returns `Database.SaveResult` (or a list of them) and does not throw on a failed publish — its behavior mirrors partial-success `Database.insert`. Every publish call checks `isSuccess()` per result and logs failures through [`Logger.cls`](../../utilities/logging/Logger.cls); an unchecked publish result is a review-blocking defect.
 
 **Why.** Publishing can fail per event — while sibling events in the same call succeed — and the method raises nothing. The only evidence is the `SaveResult` nobody read. Note the asymmetry: `isSuccess() == true` means the publish request was *queued*; actual delivery happens asynchronously (§4.3).
 

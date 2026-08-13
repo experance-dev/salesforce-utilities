@@ -1,6 +1,6 @@
 # Salesforce Engineering Standards
 
-A full, opinionated standards set for building on the Salesforce platform. Each file governs one domain, states its rules imperatively (**Rule** first, then **Why**, then a worked example where it earns its place), and is written to be enforceable — in code review, by the [static analyzer gate](static-analysis.md), or by CI. The companion [best-practices/](../best-practices/README.md) folder is the quick-reference conventions layer; these files are the deep standards behind it. Code examples reference the shipped [utilities](../utilities/) classes, which exist precisely to make these rules cheap to follow.
+A full, opinionated standards set for building on the Salesforce platform. Each file governs one domain, states its rules imperatively (**Rule** first, then **Why**, then a worked example where it earns its place), and is written to be enforceable — in code review, by the [static analyzer gate](static-analysis.md), or by CI. The companion [best-practices/](../best-practices/README.md) folder is the quick-reference conventions layer; these files are the deep standards behind it. Code examples reference the shipped [utilities](../../utilities/) classes, which exist precisely to make these rules cheap to follow.
 
 ## Core code standards
 

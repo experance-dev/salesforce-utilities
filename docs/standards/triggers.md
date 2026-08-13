@@ -6,7 +6,7 @@ This file governs how Apex triggers are structured on top of the shared dispatch
 
 **Rule.** Every SObject gets exactly one trigger, covering every event it needs (`before insert`, `before update`, `before delete`, `after insert`, `after update`, `after delete`, `after undelete`). The trigger body contains no business logic, no SOQL, no DML — it instantiates a handler and calls `.run()`.
 
-**Why.** [`TriggerHandler.cls`](../utilities/triggers/TriggerHandler.cls) centralizes three things that only work if every trigger dispatches through the same door: a recursion guard (`setMaxLoopCount` / `addToLoopCount`, throwing once a handler's run count exceeds its ceiling), a bypass registry (`bypass` / `clearBypass` / `isBypassed`) for suspending a handler mid-transaction, and context detection that maps `Trigger.operationType` onto the right hook method. Splitting logic across multiple triggers on the same object, or putting logic directly in the trigger body, routes around all three.
+**Why.** [`TriggerHandler.cls`](../../utilities/triggers/TriggerHandler.cls) centralizes three things that only work if every trigger dispatches through the same door: a recursion guard (`setMaxLoopCount` / `addToLoopCount`, throwing once a handler's run count exceeds its ceiling), a bypass registry (`bypass` / `clearBypass` / `isBypassed`) for suspending a handler mid-transaction, and context detection that maps `Trigger.operationType` onto the right hook method. Splitting logic across multiple triggers on the same object, or putting logic directly in the trigger body, routes around all three.
 
 ```apex
 trigger OrderTrigger on Order__c (
@@ -32,7 +32,7 @@ public class OrderTriggerHandler extends TriggerHandler {
 }
 ```
 
-See [`TriggerHandler.cls`](../utilities/triggers/TriggerHandler.cls) for the full dispatch / loop-count / bypass implementation, and [`TriggerHandlerTest.cls`](../utilities/triggers/TriggerHandlerTest.cls) for how to exercise a handler's hooks directly against a test-mode context instead of firing DML through a real trigger.
+See [`TriggerHandler.cls`](../../utilities/triggers/TriggerHandler.cls) for the full dispatch / loop-count / bypass implementation, and [`TriggerHandlerTest.cls`](../../utilities/triggers/TriggerHandlerTest.cls) for how to exercise a handler's hooks directly against a test-mode context instead of firing DML through a real trigger.
 
 ## 2. Multiple concerns on the same SObject register as separate handler instances, not branches inside one
 

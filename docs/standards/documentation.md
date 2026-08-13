@@ -19,7 +19,7 @@ Every shipped Apex class header and every LWC file's `@author` line names the hu
 public inherited sharing class OrderDiscountService {
 ```
 
-[`DMLManager.cls`](../utilities/dml/DMLManager.cls) and [`Logger.cls`](../utilities/logging/Logger.cls) in this repo follow the same shape — one named author, one `@since`, one running `@last`.
+[`DMLManager.cls`](../../utilities/dml/DMLManager.cls) and [`Logger.cls`](../../utilities/logging/Logger.cls) in this repo follow the same shape — one named author, one `@since`, one running `@last`.
 
 ## 2 Change-log discipline in the header
 
@@ -35,7 +35,7 @@ The `@last` entry is the audit trail of what the class does *now*, not a mirror 
  */
 ```
 
-If two entries carry the same date, they were written wrong — merge them on the next touch. [`DMLManager.cls`](../utilities/dml/DMLManager.cls) is a real example of the discipline: its `@last` line reads `May 2026 — USER_MODE migration; DMLManagerException now extends UtilitiesModuleException` — one line summarizing the day's change, not a list of every commit that touched the file.
+If two entries carry the same date, they were written wrong — merge them on the next touch. [`DMLManager.cls`](../../utilities/dml/DMLManager.cls) is a real example of the discipline: its `@last` line reads `May 2026 — USER_MODE migration; DMLManagerException now extends UtilitiesModuleException` — one line summarizing the day's change, not a list of every commit that touched the file.
 
 Letting `@last` grow into a full change history defeats its purpose: a reader scanning the header wants "what does this class do and when did that last change," not a duplicate of `git log --follow`. If you find yourself appending an entry for every PR, the class is overdue for a squash of its own header.
 

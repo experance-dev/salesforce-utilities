@@ -20,7 +20,7 @@ This file governs the decision boundary between declarative automation (record-t
 
 **Why.** Relative ordering between record-triggered flows and Apex triggers within the same phase is only partially controllable. A mixed stack turns "what runs before what" into something you discover in production rather than read off the metadata — and "just one small flow" on a trigger-owned object is how that discovery starts.
 
-When flow and Apex contributions genuinely must share one ordered pipeline — a large multi-team org with both declarative and code owners on the same object — the strongest community answer is the [Trigger Actions Framework](https://github.com/mitchspano/trigger-actions-framework): one class or flow per action, sequenced and toggled by custom metadata rows in a single pipeline. This library ships handler-based dispatch instead ([TriggerHandler.cls](../utilities/triggers/TriggerHandler.cls)) because the CMDT indirection costs readability most orgs don't need to spend. If your org has the multi-team problem, adopt that framework deliberately — don't drift into mixed peers.
+When flow and Apex contributions genuinely must share one ordered pipeline — a large multi-team org with both declarative and code owners on the same object — the strongest community answer is the [Trigger Actions Framework](https://github.com/mitchspano/trigger-actions-framework): one class or flow per action, sequenced and toggled by custom metadata rows in a single pipeline. This library ships handler-based dispatch instead ([TriggerHandler.cls](../../utilities/triggers/TriggerHandler.cls)) because the CMDT indirection costs readability most orgs don't need to spend. If your org has the multi-team problem, adopt that framework deliberately — don't drift into mixed peers.
 
 ## 3. "One flow per object" is retired — entry conditions and Trigger Order are the real controls
 
@@ -49,7 +49,7 @@ When flow and Apex contributions genuinely must share one ordered pipeline — a
 - Guaranteed bulk behavior at data-migration volume (flows hit row-limit errors and unbatchable loops where bulkified Apex does not)
 - Reuse of the same logic across surfaces — trigger, REST endpoint, LWC controller, batch
 - Unit-testability with mocked seams and asserted behavior, not a debug-run in a sandbox
-- Anything that must route through this library's security and DML wrappers — [DMLManager](../utilities/dml/DMLManager.cls) `USER_MODE` enforcement, [Logger](../utilities/logging/Logger.cls) error handling
+- Anything that must route through this library's security and DML wrappers — [DMLManager](../../utilities/dml/DMLManager.cls) `USER_MODE` enforcement, [Logger](../../utilities/logging/Logger.cls) error handling
 
 **Why.** Each item is something a flow either cannot express or can only fake at a cost that resurfaces later as a limit error or an untestable canvas. Escalated logic lands in the service layer per [architecture-layering.md](./architecture-layering.md); the flow-facing surface — if one is still needed — shrinks to a thin invocable wrapper around the service call. The wrapper stays one call deep — validation, queries, and DML all live in the service, where they're testable with mocked seams:
 
@@ -68,7 +68,7 @@ public with sharing class OrderDiscountFloorInvocable {
 
 **Rule.** Feature toggles and automation bypasses are Custom Permissions — named on a fixed grammar such as `Bypass_<Object>_<Automation>` — and every mechanism automating the object checks them: Apex handlers via `FeatureManagement.checkPermission()`, record-triggered flows via `$Permission` in their entry conditions, validation rules via `$Permission` in the formula. Scope bypasses per object, never as one global kill switch, and house them in dedicated permission sets so granting a bypass is an assignment, not a deploy.
 
-**Why.** A data migration or integration backfill has to silence automation on both sides of the boundary at once; a bypass only the Apex handler honors leaves the flows firing, and vice versa. One custom permission read by all three surfaces makes "turn off this object's automation for the migration user" a permission-set assignment that takes seconds and reverses cleanly — and per-object scoping keeps that switch from silencing the rest of the org. The [TriggerHandler](../utilities/triggers/TriggerHandler.cls) bypass registry (`bypass` / `clearBypass`) covers the in-transaction Apex case; the custom permission is the cross-mechanism, cross-session control.
+**Why.** A data migration or integration backfill has to silence automation on both sides of the boundary at once; a bypass only the Apex handler honors leaves the flows firing, and vice versa. One custom permission read by all three surfaces makes "turn off this object's automation for the migration user" a permission-set assignment that takes seconds and reverses cleanly — and per-object scoping keeps that switch from silencing the rest of the org. The [TriggerHandler](../../utilities/triggers/TriggerHandler.cls) bypass registry (`bypass` / `clearBypass`) covers the in-transaction Apex case; the custom permission is the cross-mechanism, cross-session control.
 
 ## 7. Same-record field defaulting is a before-save flow — full stop
 
@@ -84,7 +84,7 @@ public with sharing class OrderDiscountFloorInvocable {
 
 ## 9. Every data-touching flow has a fault path, and the fault path logs
 
-**Rule.** Every data element and callout action in a flow carries a fault connector, and the fault path records the failure through an invocable log action writing to the same persistent store as [Logger](../utilities/logging/Logger.cls) — not a screen message, not an admin email.
+**Rule.** Every data element and callout action in a flow carries a fault connector, and the fault path records the failure through an invocable log action writing to the same persistent store as [Logger](../../utilities/logging/Logger.cls) — not a screen message, not an admin email.
 
 **Why.** An unhandled flow fault emails an admin and vanishes; nothing persists that correlates the failure with the transaction that caused it. Wiring flow faults into the same log store as Apex gives one observability pane across both halves of the automation estate — the flow failure and the Apex failure for the same save show up side by side.
 

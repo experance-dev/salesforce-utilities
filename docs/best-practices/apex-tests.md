@@ -32,7 +32,7 @@ static void setup() {
 }
 ```
 
-- Fake IDs from [`Utilities.getFakeId(SObjectType)`](../utilities/general/Utilities.cls) (e.g. `Utilities.getFakeId(Account.SObjectType)`) — never manually concatenate ID strings.
+- Fake IDs from [`Utilities.getFakeId(SObjectType)`](../../utilities/general/Utilities.cls) (e.g. `Utilities.getFakeId(Account.SObjectType)`) — never manually concatenate ID strings.
 
 ## Canonical example
 
@@ -80,6 +80,6 @@ Every public method gets at least one negative test (invalid input, permission d
 
 If your production code branches on `Test.isRunningTest()`, the test isn't testing production code. Refactor to inject the test-mode behavior (dependency injection, mock service, `@TestVisible` setter) instead.
 
-### Mock callouts with [`HttpCalloutMockFactory`](../utilities/testing/HttpCalloutMockFactory.cls)
+### Mock callouts with [`HttpCalloutMockFactory`](../../utilities/testing/HttpCalloutMockFactory.cls)
 
 Standardize callout mocking through the factory — don't inline anonymous `HttpCalloutMock` classes per test.

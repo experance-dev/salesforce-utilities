@@ -10,7 +10,7 @@ This file governs two related but distinct problems: **retention** (deleting rec
 
 **Why.** Retention windows are a business/compliance decision, not an engineering one, and they change: legal shortens a window, a new object needs purging, an exception gets carved out for one record type. If that logic lives in Apex, every change is a deploy with a review cycle attached. If it lives in CMDT, an admin (or a change set) ships the new window without touching code.
 
-**Evidence.** [`LogCleanupBatch`](../utilities/logging/LogCleanUp/LogCleanupBatch.cls) reads retention days per log object from `Log_Clean_Up__mdt` via [`LogCleanupContext`](../utilities/logging/LogCleanUp/LogCleanupContext.cls), builds one dynamic query per configured object, and deletes whatever's older than its configured cutoff — adding a new log type to the purge is a CMDT record, not a code change.
+**Evidence.** [`LogCleanupBatch`](../../utilities/logging/LogCleanUp/LogCleanupBatch.cls) reads retention days per log object from `Log_Clean_Up__mdt` via [`LogCleanupContext`](../../utilities/logging/LogCleanUp/LogCleanupContext.cls), builds one dynamic query per configured object, and deletes whatever's older than its configured cutoff — adding a new log type to the purge is a CMDT record, not a code change.
 
 ```apex
 Map<String, Integer> logRetentionDays = context.getLogRetentionDays();
@@ -29,7 +29,7 @@ for (String logName : logRetentionDays.keySet()) {
 
 **Why.** `without sharing` plus a system-mode delete is real privilege elevation — worth a second look from anyone reading the class. Stating the reason inline (records must be purged independent of ownership) turns that second look into a five-second confirmation instead of an investigation. Keeping it out of the `@AuraEnabled` surface means the elevation can never be triggered by a user action, only by the trusted scheduler.
 
-**Evidence.** [`LogCleanupBatch`](../utilities/logging/LogCleanUp/LogCleanupBatch.cls) declares `without sharing`, documents the elevation in its class header and again at the call site, and deletes via `Database.delete(scope, AccessLevel.SYSTEM_MODE)` — the one place in the codebase a [`DMLManager`](../utilities/dml/DMLManager.cls) bypass is warranted, because `DMLManager`'s default path enforces `USER_MODE`. Route the same elevation through [`DMLManager.deleteAsSystem`](../utilities/dml/DMLManager.cls) where the manager's system-mode surface covers your case. The class has no `@AuraEnabled` methods.
+**Evidence.** [`LogCleanupBatch`](../../utilities/logging/LogCleanUp/LogCleanupBatch.cls) declares `without sharing`, documents the elevation in its class header and again at the call site, and deletes via `Database.delete(scope, AccessLevel.SYSTEM_MODE)` — the one place in the codebase a [`DMLManager`](../../utilities/dml/DMLManager.cls) bypass is warranted, because `DMLManager`'s default path enforces `USER_MODE`. Route the same elevation through [`DMLManager.deleteAsSystem`](../../utilities/dml/DMLManager.cls) where the manager's system-mode surface covers your case. The class has no `@AuraEnabled` methods.
 
 ### 1.3 Recommended pattern: predicate-driven retention, positive framing, fail closed on error
 
@@ -60,7 +60,7 @@ try {
 
 **Why.** `escapeSingleQuotes()` exists to neutralize single quotes in *untrusted* string input before it lands inside a query literal. A CMDT object-API-name or where-clause fragment isn't user input — it's admin-authored configuration that ships the same way a permission set or a validation rule does. Escaping it doesn't add safety; it just obscures that the trust boundary is "who can edit CMDT," not "what characters are in this string."
 
-**Evidence.** [`LogCleanupBatch.start()`](../utilities/logging/LogCleanUp/LogCleanupBatch.cls) composes `'SELECT Id FROM ' + logName + ' WHERE CreatedDate < :cutoffDate ...'` from a CMDT-sourced object name with an inline comment stating the trust boundary explicitly, while binding the actual variable data (`cutoffDate`) rather than concatenating it.
+**Evidence.** [`LogCleanupBatch.start()`](../../utilities/logging/LogCleanUp/LogCleanupBatch.cls) composes `'SELECT Id FROM ' + logName + ' WHERE CreatedDate < :cutoffDate ...'` from a CMDT-sourced object name with an inline comment stating the trust boundary explicitly, while binding the actual variable data (`cutoffDate`) rather than concatenating it.
 
 ---
 

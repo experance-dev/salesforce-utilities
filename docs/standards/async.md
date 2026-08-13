@@ -87,7 +87,7 @@ private Map<SObjectType, List<SObject>> groupBySObjectType(List<SObject> scope) 
 }
 ```
 
-See [`DMLManager.cls`](../utilities/dml/DMLManager.cls) for the `deleteAsSystem` / `deleteAsUser` surface used per type above, and [`Logger.cls`](../utilities/logging/Logger.cls) for the per-type exception logging.
+See [`DMLManager.cls`](../../utilities/dml/DMLManager.cls) for the `deleteAsSystem` / `deleteAsUser` surface used per type above, and [`Logger.cls`](../../utilities/logging/Logger.cls) for the per-type exception logging.
 
 ## 4. Bounded, bulkified trigger-time SOQL fan-out doesn't automatically need to go async
 

@@ -5,7 +5,7 @@
 ## Canonical guidance from existing standards
 
 - Single-responsibility per method/class. Decompose anything over the complexity budget (see [apex.md](apex.md)).
-- All DML through [`DMLManager`](../utilities/dml/DMLManager.cls) using `xxxAsUser` methods.
+- All DML through [`DMLManager`](../../utilities/dml/DMLManager.cls) using `xxxAsUser` methods.
 - State that must outlive the current transaction belongs in session platform cache, never static class variables. State scoped to the current transaction (a trigger recursion guard, a bypass flag) is exactly what static class variables are for — see [apex.md](apex.md#caching).
 
 ---
@@ -14,7 +14,7 @@
 
 ### Trigger framework
 
-- **One trigger per object.** The trigger body is one line: delegate to [`TriggerHandler`](../utilities/triggers/TriggerHandler.cls).
+- **One trigger per object.** The trigger body is one line: delegate to [`TriggerHandler`](../../utilities/triggers/TriggerHandler.cls).
 - Handlers route events to services; they don't contain business logic. A `BeforeInsert` handler method either calls service methods or does cheap validation — nothing else.
 - Services and domain logic are independently testable without firing a trigger.
 

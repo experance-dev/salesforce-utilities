@@ -29,7 +29,7 @@ Schema-design rules for the fields themselves live in [data-model.md](./data-mod
 
 **Why.** An enumerated value set is a vocabulary an agent can ground on: `Active`, `Lapsed`, `Churned` are answers. Free text is noise the model will hallucinate structure into — `"active"`, `"ACTIVE - renewed"`, and `"still a customer I think"` are three strings, zero categories. The same enumeration is also what reports, validation rules, and flow entry conditions consume, so the rule costs nothing extra.
 
-Apex that consumes categorical values reads the enumeration from describe rather than hardcoding it — see [`UtilPickLists.cls`](../utilities/picklists/UtilPickLists.cls) for the shipped helpers.
+Apex that consumes categorical values reads the enumeration from describe rather than hardcoding it — see [`UtilPickLists.cls`](../../utilities/picklists/UtilPickLists.cls) for the shipped helpers.
 
 ## 4. Put a stable external key on every object that feeds grounding
 

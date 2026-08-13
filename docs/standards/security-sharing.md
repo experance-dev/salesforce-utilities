@@ -20,9 +20,9 @@ public without sharing class LogCleanupBatch
   implements Database.Batchable<SObject>, Database.Stateful {
 ```
 
-See [`LogCleanupBatch.cls`](../utilities/logging/LogCleanUp/LogCleanupBatch.cls) for the complete pattern, including the method-level comment justifying the elevation at the point it's used (§3 below).
+See [`LogCleanupBatch.cls`](../../utilities/logging/LogCleanUp/LogCleanupBatch.cls) for the complete pattern, including the method-level comment justifying the elevation at the point it's used (§3 below).
 
-`inherited sharing` is the right default for a shared utility class that is called from many contexts and should not impose its own sharing model — see [`DMLManager.cls`](../utilities/dml/DMLManager.cls) and [`DMLHelper.cls`](../utilities/dml/DMLHelper.cls), both `inherited sharing` so the caller's context is respected without the utility re-deciding it.
+`inherited sharing` is the right default for a shared utility class that is called from many contexts and should not impose its own sharing model — see [`DMLManager.cls`](../../utilities/dml/DMLManager.cls) and [`DMLHelper.cls`](../../utilities/dml/DMLHelper.cls), both `inherited sharing` so the caller's context is respected without the utility re-deciding it.
 
 ## 2. Every SOQL query enforces access at the query site with `WITH USER_MODE`
 
@@ -61,7 +61,7 @@ An elevation looks like this — note the comment carries the *why*, not just th
 Database.delete(scope, AccessLevel.SYSTEM_MODE); //NOPMD
 ```
 
-See [`DMLManager.cls`](../utilities/dml/DMLManager.cls) for the full `insertAsUser` / `updateAsUser` / `upsertAsUser` / `deleteAsUser` / `mergeAsUser` surface and its `AsSystem` counterparts, and [`LogCleanupBatch.cls`](../utilities/logging/LogCleanUp/LogCleanupBatch.cls) for a real, documented `SYSTEM_MODE` bypass.
+See [`DMLManager.cls`](../../utilities/dml/DMLManager.cls) for the full `insertAsUser` / `updateAsUser` / `upsertAsUser` / `deleteAsUser` / `mergeAsUser` surface and its `AsSystem` counterparts, and [`LogCleanupBatch.cls`](../../utilities/logging/LogCleanUp/LogCleanupBatch.cls) for a real, documented `SYSTEM_MODE` bypass.
 
 If a platform API forces a one-off exception — e.g. `Database.upsert(records, externalIdField, false, AccessLevel.USER_MODE)` for external-ID upsert, which has no manager-wrapped overload — document it inline with a `TODO:` noting the gap, so the manager's surface can be extended later.
 
