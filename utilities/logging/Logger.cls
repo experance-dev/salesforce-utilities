@@ -12,14 +12,53 @@
  *              persistence degrades to debug-log output and is swallowed. Debug, info,
  *              and warn entries remain debug-log-only until an org opts lower
  *              severities into the sink.
+ *
+ *              Outbound-integration failures have their own sink: `logApiException`
+ *              persists one `API_Exception_Log__c` row per failure under the same
+ *              never-break-the-host-transaction contract. Everything free-text bound
+ *              for that sink first passes through allowlist-based redaction
+ *              (`scrubApiDiagnostic`) — only known-safe token shapes survive; raw
+ *              request/response bodies are never persisted by default.
  * @group Logger
  * @since September 2024
  * @author David Wood
  * @last May 2026 — conformance refactor
  * @last August 2026 — error path hardened: logException ungated from printLogs, captures the exception
  *                      type name, persists Debug_Log__c as the durable sink; analyzer conformance
+ * @last 2026-08-13 — API-exception sink ported: logApiException overloads persist API_Exception_Log__c
+ *                     behind allowlist-based redaction; logException guarded against a null exception
  */
+// PMD waiver per docs/standards/static-analysis.md §3.6: facade aggregates 20+ narrow
+// logging operations; per-method budgets satisfied (highest method complexity 6 < 8).
+@SuppressWarnings('PMD.CyclomaticComplexity')
 public inherited sharing class Logger {
+  /**
+   * @description Test seam: when non-null, the API-exception persist path throws this
+   *              instead of inserting, so the swallow-without-rethrow contract is
+   *              testable without granting a way to make real DML fail.
+   */
+  @TestVisible
+  private static Exception apiPersistFailureForTest;
+
+  /**
+   * @description Allowlisted token shapes that survive `scrubApiDiagnostic` — short
+   *              numerics (HTTP status codes, line/column refs), HTTP verbs,
+   *              identifier-shaped and dotted-path tokens (class names, exception
+   *              types, stack frames), UUID-shaped correlation ids, and freestanding
+   *              punctuation. `@TestVisible` so tests can pin the default behavior and
+   *              a consuming org can widen the list deliberately — widening is a
+   *              data-governance decision, so it lives in one seam, not scattered
+   *              call-site formatting.
+   */
+  @TestVisible
+  private static List<String> apiDiagnosticAllowlist = new List<String>{
+    '\\d{1,4}',
+    'GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS',
+    '[A-Za-z_][A-Za-z0-9_]*(?:[.:$][A-Za-z0-9_<>]+)*',
+    '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
+    '\\p{Punct}{1,3}'
+  };
+
   // ─── Core dispatch ───────────────────────────────────────────────────────────
 
   /**
@@ -183,6 +222,84 @@ public inherited sharing class Logger {
     logExceptionInternal(e, className, methodName);
   }
 
+  // ─── API exception logging ────────────────────────────────────────────────────
+
+  /**
+   * @description Persists one `API_Exception_Log__c` row for an outbound-integration
+   *              failure (Jira, Slack, Workday, …) so support can report on what broke
+   *              without scavenging debug logs, and mirrors an allowlist-scrubbed
+   *              summary to the debug log. Self-wraps its DML — the caller never needs
+   *              a try-catch, and a persistence failure degrades to a debug-log
+   *              warning and is swallowed. Null-safe: a null exception still persists
+   *              a row carrying the caller's context fields.
+   *
+   *              What lands in the row is a redacted diagnostic summary — status
+   *              codes, endpoint host+path (query strings stripped), correlation ids,
+   *              exception type names, and identifier-shaped tokens survive; anything
+   *              else is masked. Raw request/response bodies are never persisted by
+   *              default; widen the allowlist deliberately via the
+   *              `apiDiagnosticAllowlist` seam if an org needs more.
+   * @param apiName        Logical API / integration name (e.g. 'Jira').
+   * @param operation      Specific method or step that failed.
+   * @param sourceObject   SObject API name the failure was about (nullable).
+   * @param sourceRecordId Record Id the failure was about (nullable).
+   * @param transactionId  Correlation id, e.g. System.Request.getCurrent().getRequestId() (nullable).
+   * @param ex             The thrown Apex exception (nullable).
+   */
+  @SuppressWarnings('PMD.ExcessiveParameterList')
+  public static void logApiException(
+    String apiName,
+    String operation,
+    String sourceObject,
+    Id sourceRecordId,
+    String transactionId,
+    Exception ex
+  ) {
+    writeApiException(
+      apiName,
+      operation,
+      sourceObject,
+      sourceRecordId,
+      transactionId,
+      ex?.getMessage(),
+      ex?.getTypeName(),
+      ex?.getStackTraceString()
+    );
+  }
+
+  /**
+   * @description Same sink as the Exception overload, for non-exception error
+   *              conditions (invalid payload, missing config, unexpected status).
+   *              The message passes through the same allowlist-based redaction
+   *              before it persists.
+   * @param apiName        Logical API / integration name (e.g. 'Jira').
+   * @param operation      Specific method or step that failed.
+   * @param sourceObject   SObject API name the failure was about (nullable).
+   * @param sourceRecordId Record Id the failure was about (nullable).
+   * @param transactionId  Correlation id, e.g. System.Request.getCurrent().getRequestId() (nullable).
+   * @param message        Free-text description of the failure (nullable; scrubbed before persist).
+   */
+  @SuppressWarnings('PMD.ExcessiveParameterList')
+  public static void logApiException(
+    String apiName,
+    String operation,
+    String sourceObject,
+    Id sourceRecordId,
+    String transactionId,
+    String message
+  ) {
+    writeApiException(
+      apiName,
+      operation,
+      sourceObject,
+      sourceRecordId,
+      transactionId,
+      message,
+      null,
+      null
+    );
+  }
+
   // ─── Private helpers ──────────────────────────────────────────────────────────
 
   // Mirrors the four-argument public debug overload it backs; the class/method context pair does not decompose.
@@ -217,11 +334,152 @@ public inherited sharing class Logger {
     }
   }
 
+  /**
+   * @description Builds and persists the API_Exception_Log__c row. The insert runs at
+   *              `AccessLevel.SYSTEM_MODE` by the same deliberate durable-sink policy
+   *              as `persistErrorLog`: Logger sits beneath the DML layer (DMLManager
+   *              logs through Logger, so routing back through it would create a
+   *              dependency cycle), and a diagnostic sink must capture the row
+   *              regardless of the running user's CRUD/FLS — dropping errors for
+   *              exactly the users who lack log-object access would blind support to
+   *              every failure those users generate. Contract: can never break the
+   *              host transaction — the insert is wrapped in its own try-catch, and
+   *              the failure fallback references only the persistence failure, never
+   *              the caller's original exception (which may be null).
+   * @param apiName        Logical API / integration name; truncated to field length.
+   * @param operation      Failing operation or step; truncated to field length.
+   * @param sourceObject   SObject API name the failure was about (nullable).
+   * @param sourceRecordId Record Id the failure was about (nullable).
+   * @param transactionId  Correlation id (nullable); truncated to field length.
+   * @param message        Raw failure message; scrubbed and truncated before persist.
+   * @param exceptionType  Exception type name, or null for non-exception failures.
+   * @param stackTrace     Raw stack trace; scrubbed and truncated before persist.
+   */
+  @SuppressWarnings('PMD.ExcessiveParameterList')
+  private static void writeApiException(
+    String apiName,
+    String operation,
+    String sourceObject,
+    Id sourceRecordId,
+    String transactionId,
+    String message,
+    String exceptionType,
+    String stackTrace
+  ) {
+    String scrubbedMessage = scrubApiDiagnostic(message);
+    storeLog(
+      System.LoggingLevel.ERROR,
+      formatLogMessage(
+        System.LoggingLevel.ERROR,
+        '[' + apiName + '/' + operation + '] ' + scrubbedMessage,
+        'Logger',
+        'logApiException'
+      )
+    );
+    try {
+      if (apiPersistFailureForTest != null) {
+        throw apiPersistFailureForTest;
+      }
+      // SYSTEM_MODE bypass is intentional — see method ApexDoc above.
+      Database.insert( //NOPMD
+        new API_Exception_Log__c(
+          API_Name__c = apiName?.abbreviate(255),
+          Operation__c = operation?.abbreviate(255),
+          Source_Object__c = sourceObject?.abbreviate(255),
+          Source_Record_Id__c = sourceRecordId, // implicit null-safe Id → String
+          Transaction_Id__c = transactionId?.abbreviate(255),
+          Severity__c = 'Error',
+          Message__c = scrubbedMessage?.abbreviate(32768),
+          Exception_Type__c = exceptionType?.abbreviate(255),
+          Stack_Trace__c = scrubApiDiagnostic(stackTrace)?.abbreviate(32768)
+        ),
+        AccessLevel.SYSTEM_MODE
+      );
+    } catch (Exception writeFail) {
+      // Warn stays debug-log-only, so this cannot recurse back into persistence,
+      // and only writeFail is dereferenced — the original exception may be null.
+      log(
+        System.LoggingLevel.WARN,
+        'API_Exception_Log__c persistence failed: ' + writeFail.getTypeName(),
+        'Logger',
+        'logApiException'
+      );
+    }
+  }
+
+  /**
+   * @description Allowlist-based redaction for content destined for
+   *              API_Exception_Log__c. Inverts the usual scrub direction: instead of
+   *              masking known-bad patterns (which misses every PII shape nobody
+   *              predicted), only tokens matching an allowlisted diagnostic shape
+   *              survive, URL tokens are reduced to scheme + host + path with query
+   *              strings and fragments stripped, and everything else is replaced with
+   *              `[REDACTED]`. Line structure is preserved so stack traces stay
+   *              readable. Null- and blank-safe.
+   * @param input Raw message or stack-trace string (nullable).
+   * @return Scrubbed string, or the input unchanged when null/blank.
+   */
+  @TestVisible
+  private static String scrubApiDiagnostic(String input) {
+    if (String.isBlank(input)) {
+      return input;
+    }
+    // One alternation over the allowlist, tolerant of wrapping brackets and
+    // trailing sentence punctuation so prose and stack frames survive intact.
+    // Compiled per call because the allowlist itself is a mutable test seam.
+    Pattern allowed = Pattern.compile(
+      '[\\(\\[\\{]*(?:' +
+        String.join(apiDiagnosticAllowlist, '|') +
+        ')[\\)\\]\\}\\.,;:!\\?]*'
+    );
+    List<String> scrubbedLines = new List<String>();
+    for (String line : input.split('\r?\n')) {
+      List<String> keptTokens = new List<String>();
+      for (String token : line.split('[ \t]+')) {
+        keptTokens.add(scrubToken(token, allowed));
+      }
+      scrubbedLines.add(String.join(keptTokens, ' '));
+    }
+    return String.join(scrubbedLines, '\n');
+  }
+
+  private static String scrubToken(String token, Pattern allowed) {
+    if (String.isBlank(token)) {
+      return token;
+    }
+    if (
+      token.startsWithIgnoreCase('http://') ||
+      token.startsWithIgnoreCase('https://')
+    ) {
+      return scrubUrlToken(token);
+    }
+    return allowed.matcher(token).matches() ? token : '[REDACTED]';
+  }
+
+  // Reduces a URL token to scheme + host + path; query strings and fragments are
+  // where credentials and record data ride, so they never survive. An authority
+  // carrying embedded credentials (user:pass@host) is redacted outright.
+  private static String scrubUrlToken(String token) {
+    String base = token.substringBefore('?').substringBefore('#');
+    return base.contains('@') ? '[REDACTED]' : base;
+  }
+
   private static void logExceptionInternal(
     Exception e,
     String className,
     String methodName
   ) {
+    if (e == null) {
+      // Guard, not a throw: dereferencing a null exception in the try block would
+      // land in the catch below and NPE again on the fallback's e.getMessage().
+      log(
+        System.LoggingLevel.WARN,
+        'logException called with a null exception',
+        className,
+        methodName
+      );
+      return;
+    }
     try {
       String message =
         'Exception in ' +

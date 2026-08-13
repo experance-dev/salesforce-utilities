@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Message__c</fullName>
+    <label>Message</label>
+    <type>LongTextArea</type>
+    <length>32768</length>
+    <visibleLines>10</visibleLines>
+    <description>Allowlist-scrubbed diagnostic summary: status codes, endpoint host+path (query strings stripped), correlation ids, and exception detail survive; everything else is redacted before persist. Never carries raw request/response bodies. Logger truncates anything longer than the field.</description>
+</CustomField>
